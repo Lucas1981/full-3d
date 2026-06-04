@@ -22,11 +22,12 @@ export class Renderer {
 
   /**
    * Assembles MVP = Projection * View * Model.
-   * View is an identity matrix — camera sits at the world origin, looking down −Z.
+   * @param {import('./mesh.js').Mesh}     mesh
+   * @param {import('./camera.js').Camera} camera
    */
-  #buildMVP(mesh) {
+  #buildMVP(mesh, camera) {
     const model = mesh.getModelMatrix();
-    const view  = mat4.identity();
+    const view  = camera.getViewMatrix();
     const proj  = mat4.perspective(FOV_Y, this.aspectRatio, NEAR, FAR);
     return mat4.multiply(proj, mat4.multiply(view, model));
   }
@@ -52,9 +53,13 @@ export class Renderer {
     };
   }
 
-  /** Draws a single mesh as a coloured wireframe. */
-  drawMesh(mesh) {
-    const mvp = this.#buildMVP(mesh);
+  /**
+   * Draws a single mesh as a coloured wireframe.
+   * @param {import('./mesh.js').Mesh}     mesh
+   * @param {import('./camera.js').Camera} camera
+   */
+  drawMesh(mesh, camera) {
+    const mvp = this.#buildMVP(mesh, camera);
     const ctx = this.ctx;
 
     const projected = mesh.vertices.map(v => this.#projectVertex(mvp, v));

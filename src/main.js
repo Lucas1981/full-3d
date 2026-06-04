@@ -1,5 +1,6 @@
 import { Mesh }     from './mesh.js';
 import { Renderer } from './renderer.js';
+import { Camera }   from './camera.js';
 import cubeData     from './assets/cube.json';
 
 const canvas   = document.getElementById('canvas');
@@ -11,17 +12,18 @@ function resize() {
 }
 
 resize();
-window.addEventListener('resize', () => {
-  resize();
-  draw();
-});
+window.addEventListener('resize', () => { resize(); draw(); });
 
 const cube = new Mesh(cubeData);
 cube.position.z = -4; // 4 units in front of the camera
 
+const camera = new Camera();
+camera.position = [0, 0, 0];
+camera.target   = [0, 0, -1]; // looking straight down −Z
+
 function draw() {
   renderer.clear();
-  renderer.drawMesh(cube);
+  renderer.drawMesh(cube, camera);
 }
 
 draw();

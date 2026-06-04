@@ -85,6 +85,47 @@ export function rotationZ(angle) {
 }
 
 /**
+ * View (look-at) matrix.
+ *
+ * Builds the UVN camera frame, then encodes it as V = R * T:
+ *   N = normalize(target − eye)   forward  (maps to camera −Z)
+ *   U = normalize(N × worldUp)    right    (maps to camera +X)
+ *   V = U × N                     up       (maps to camera +Y, re-orthogonalised)
+ *
+ * @param {number[]} eye      [x,y,z] camera position
+ * @param {number[]} target   [x,y,z] point being looked at
+ * @param {number[]} worldUp  [x,y,z] reference up vector (typically [0,1,0])
+ */
+export function lookAt(eye, target, worldUp) {
+  // N — forward
+  const nx = target[0] - eye[0];
+  const ny = target[1] - eye[1];
+  const nz = target[2] - eye[2];
+  const nLen = Math.sqrt(nx*nx + ny*ny + nz*nz) || 1;
+  const Nx = nx/nLen, Ny = ny/nLen, Nz = nz/nLen;
+
+  // U — right = N × worldUp, normalised
+  let ux = Ny*worldUp[2] - Nz*worldUp[1];
+  let uy = Nz*worldUp[0] - Nx*worldUp[2];
+  let uz = Nx*worldUp[1] - Ny*worldUp[0];
+  const uLen = Math.sqrt(ux*ux + uy*uy + uz*uz) || 1;
+  const Ux = ux/uLen, Uy = uy/uLen, Uz = uz/uLen;
+
+  // V — recomputed up = U × N  (guaranteed unit length)
+  const Vx = Uy*Nz - Uz*Ny;
+  const Vy = Uz*Nx - Ux*Nz;
+  const Vz = Ux*Ny - Uy*Nx;
+
+  // Full matrix: rotate world axes into UVN frame, then translate by −eye
+  return new Float32Array([
+     Ux,  Uy,  Uz,  -(Ux*eye[0] + Uy*eye[1] + Uz*eye[2]),
+     Vx,  Vy,  Vz,  -(Vx*eye[0] + Vy*eye[1] + Vz*eye[2]),
+    -Nx, -Ny, -Nz,   (Nx*eye[0] + Ny*eye[1] + Nz*eye[2]),
+      0,   0,   0,   1,
+  ]);
+}
+
+/**
  * Standard perspective projection (right-handed, camera looks down −Z).
  * @param {number} fovY  Vertical field of view in radians.
  * @param {number} aspect  width / height.
