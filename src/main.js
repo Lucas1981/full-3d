@@ -1,20 +1,22 @@
-import { Mesh }     from './mesh.js';
-import { Renderer } from './renderer.js';
-import { Camera }   from './camera.js';
-import { PointLight } from './lights/point-light.js';
-import { DirectionalLight } from './lights/directional-light.js';
-import cubeData     from './assets/cube.json';
+import { Mesh } from "./mesh.js";
+import { Renderer } from "./renderer.js";
+import { Camera } from "./camera.js";
+import { PointLight } from "./lights/point-light.js";
+import { DirectionalLight } from "./lights/directional-light.js";
+import { SpotLight } from "./lights/spot-light.js";
+import * as vec3 from "./math/vec3.js";
+import cubeData from "./assets/cube.json";
 
-const canvas   = document.getElementById('canvas');
+const canvas = document.getElementById("canvas");
 const renderer = new Renderer(canvas);
 
 function resize() {
-  canvas.width  = window.innerWidth;
+  canvas.width = window.innerWidth;
   canvas.height = window.innerHeight;
 }
 
 resize();
-window.addEventListener('resize', resize);
+window.addEventListener("resize", resize);
 
 const cube = new Mesh(cubeData);
 cube.position.z = -4;
@@ -43,14 +45,30 @@ const pointLight = new PointLight({
   intensity: 1.4,
 });
 
-const lights = [directionalLight, pointLight];
+// Side + below, aimed at the camera-visible corner of the cube
+const spotPosition = [3.5, -2.2, -2.8];
+const spotBaseDirection = vec3.normalize(vec3.sub(cubeCenter, spotPosition));
+
+const spotLight = new SpotLight({
+  position: spotPosition,
+  direction: [...spotBaseDirection],
+  color: [160, 200, 255],
+  intensity: 1.6,
+  angle: Math.PI / 8,
+  penumbra: 0.4,
+});
+
+const lights = [directionalLight, pointLight, spotLight];
 
 const CUBE_ROTATION_SPEED = 0.8;
-const LIGHT_ORBIT_RADIUS  = 3.5;
-const LIGHT_ORBIT_HEIGHT  = 2.5; // above cube center (cube half-extent is 1)
-const LIGHT_ORBIT_SPEED   = CUBE_ROTATION_SPEED * 3;
+const LIGHT_ORBIT_RADIUS = 3.5;
+const LIGHT_ORBIT_HEIGHT = 2.5;
+const LIGHT_ORBIT_SPEED = CUBE_ROTATION_SPEED * 3;
+const SPOT_SWING_SPEED = 1.1;
+const SPOT_SWING_ANGLE = 0.45;
 
 let orbitAngle = 0;
+let spotSwingPhase = 0;
 let lastTime = performance.now();
 
 function frame(now) {
@@ -59,10 +77,22 @@ function frame(now) {
 
   cube.rotation.y += CUBE_ROTATION_SPEED * dt;
   orbitAngle += LIGHT_ORBIT_SPEED * dt;
+  spotSwingPhase += SPOT_SWING_SPEED * dt;
 
-  pointLight.position[0] = cubeCenter[0] + LIGHT_ORBIT_RADIUS * Math.sin(orbitAngle);
+  pointLight.position[0] =
+    cubeCenter[0] + LIGHT_ORBIT_RADIUS * Math.sin(orbitAngle);
   pointLight.position[1] = cubeCenter[1] + LIGHT_ORBIT_HEIGHT;
-  pointLight.position[2] = cubeCenter[2] + LIGHT_ORBIT_RADIUS * Math.cos(orbitAngle);
+  pointLight.position[2] =
+    cubeCenter[2] + LIGHT_ORBIT_RADIUS * Math.cos(orbitAngle);
+
+  const swing = Math.sin(spotSwingPhase) * SPOT_SWING_ANGLE;
+  const cos = Math.cos(swing);
+  const sin = Math.sin(swing);
+  spotLight.direction = vec3.normalize([
+    spotBaseDirection[0] * cos - spotBaseDirection[2] * sin,
+    spotBaseDirection[1],
+    spotBaseDirection[0] * sin + spotBaseDirection[2] * cos,
+  ]);
 
   renderer.clear();
   renderer.render(cube, camera, lights);

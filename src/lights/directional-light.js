@@ -1,4 +1,5 @@
 import * as vec3 from '../math/vec3.js';
+import { LightType } from './light-types.js';
 
 /**
  * Directional light — parallel rays, defined in world space.
@@ -9,7 +10,7 @@ import * as vec3 from '../math/vec3.js';
  */
 export class DirectionalLight {
   constructor({ direction, color = [255, 255, 255], intensity = 1 }) {
-    this.type      = 'directional';
+    this.type      = LightType.DIRECTIONAL;
     this.direction = vec3.normalize(direction);
     this.color     = color;
     this.intensity = intensity;

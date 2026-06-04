@@ -1,3 +1,5 @@
+import { LightType } from './light-types.js';
+
 /**
  * Point light — radiates from a world-space position with distance attenuation.
  * @param {object} opts
@@ -17,7 +19,7 @@ export class PointLight {
     linear = 0.09,
     quadratic = 0.032,
   }) {
-    this.type       = 'point';
+    this.type       = LightType.POINT;
     this.position   = [...position];
     this.color      = color;
     this.intensity  = intensity;
