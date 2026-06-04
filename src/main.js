@@ -6,6 +6,7 @@ import { DirectionalLight } from "./lights/directional-light.js";
 import { SpotLight } from "./lights/spot-light.js";
 import * as vec3 from "./math/vec3.js";
 import cubeData from "./assets/cube.json";
+import { preloadTextures } from "./textures/texture-cache.js";
 
 const canvas = document.getElementById("canvas");
 const renderer = new Renderer(canvas);
@@ -100,4 +101,6 @@ function frame(now) {
   requestAnimationFrame(frame);
 }
 
-requestAnimationFrame(frame);
+preloadTextures(cube.getTextureNames()).then(() => {
+  requestAnimationFrame(frame);
+});

@@ -4,7 +4,7 @@ import { hexToRgba } from './color.js';
 
 export class Mesh {
   /**
-   * @param {{ vertices: {x,y,z}[], polygons: {color:string, vertexIndices:number[]}[] }} json
+   * @param {{ vertices: {x,y,z}[], polygons: object[] }} json
    */
   constructor(json) {
     this.vertices = json.vertices.map(v => [v.x, v.y, v.z]);
@@ -12,15 +12,23 @@ export class Mesh {
       p => new Polygon({
         materialColor: hexToRgba(p.color),
         vertexIndices: p.vertexIndices,
+        texture: p.texture ?? null,
+        uvs: p.uvs ?? null,
       }),
     );
 
     this.position = { x: 0, y: 0, z: 0 };
-    this.rotation = { x: 0, y: 0, z: 0 }; // Euler angles in radians, applied X→Y→Z
+    this.rotation = { x: 0, y: 0, z: 0 };
     this.scale    = { x: 1, y: 1, z: 1 };
   }
 
-  /** Returns the model-to-world matrix: T * Rx * Ry * Rz * S */
+  /** Unique texture filenames referenced by this mesh. */
+  getTextureNames() {
+    return [...new Set(
+      this.polygons.map(p => p.texture).filter(Boolean),
+    )];
+  }
+
   getModelMatrix() {
     const T  = mat4.translation(this.position.x, this.position.y, this.position.z);
     const Rx = mat4.rotationX(this.rotation.x);

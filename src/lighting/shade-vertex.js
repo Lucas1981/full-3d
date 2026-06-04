@@ -115,3 +115,17 @@ export function shadeVertex(
 
   return [clamp255(r), clamp255(g), clamp255(b)];
 }
+
+/**
+ * Scalar Gouraud intensity 0–1 for textured shading (lighting on white).
+ */
+export function shadeIntensity(worldPos, worldNormal, lights, ambient = 0.2) {
+  const lit = shadeVertex(
+    worldPos,
+    worldNormal,
+    [255, 255, 255, 255],
+    lights,
+    ambient,
+  );
+  return (lit[0] + lit[1] + lit[2]) / (3 * 255);
+}
