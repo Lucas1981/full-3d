@@ -3,6 +3,58 @@
  * Vertex format: [x, y, r, g, b]
  */
 
+/** Inclusive span — matches flat-shade-rasterizer (left..right, both endpoints). */
+function fillInclusiveScanline(
+  contextData,
+  cy,
+  clx,
+  crx,
+  r1,
+  g1,
+  b1,
+  r2,
+  g2,
+  b2,
+) {
+  const left = Math.ceil(crx > clx ? clx : crx);
+  const right = Math.ceil(crx > clx ? crx : clx);
+  const span = right - left;
+
+  const startR = clx <= crx ? r1 : r2;
+  const startG = clx <= crx ? g1 : g2;
+  const startB = clx <= crx ? b1 : b2;
+  const endR = clx <= crx ? r2 : r1;
+  const endG = clx <= crx ? g2 : g1;
+  const endB = clx <= crx ? b2 : b1;
+
+  if (span <= 0) {
+    const base = (cy * contextData.width + left) * 4;
+    contextData.data[base] = startR;
+    contextData.data[base + 1] = startG;
+    contextData.data[base + 2] = startB;
+    contextData.data[base + 3] = 255;
+    return;
+  }
+
+  const drx = (endR - startR) / span;
+  const dgx = (endG - startG) / span;
+  const dbx = (endB - startB) / span;
+  let r = startR;
+  let g = startG;
+  let b = startB;
+
+  for (let i = left; i <= right; i++) {
+    const base = (cy * contextData.width + i) * 4;
+    contextData.data[base] = r;
+    contextData.data[base + 1] = g;
+    contextData.data[base + 2] = b;
+    contextData.data[base + 3] = 255;
+    r += drx;
+    g += dgx;
+    b += dbx;
+  }
+}
+
 function fillTriangleFlatBottomGouraud(triangle, contextData) {
   let tri = triangle.map((t) => [...t]);
   if (tri[2][0] < tri[1][0]) {
@@ -50,23 +102,7 @@ function fillTriangleFlatBottomGouraud(triangle, contextData) {
   let b2 = syb2;
 
   for (let cy = tri[0][1]; cy <= tri[2][1]; cy++) {
-    const drx = (r2 - r1) / (crx - clx);
-    const dgx = (g2 - g1) / (crx - clx);
-    const dbx = (b2 - b1) / (crx - clx);
-    let r = r1;
-    let g = g1;
-    let b = b1;
-
-    for (let i = Math.ceil(clx); i < Math.ceil(crx); i++) {
-      const base = (cy * contextData.width + i) * 4;
-      contextData.data[base] = r;
-      contextData.data[base + 1] = g;
-      contextData.data[base + 2] = b;
-      contextData.data[base + 3] = 255;
-      r += drx;
-      g += dgx;
-      b += dbx;
-    }
+    fillInclusiveScanline(contextData, cy, clx, crx, r1, g1, b1, r2, g2, b2);
 
     r1 += dyr1;
     g1 += dyg1;
@@ -122,23 +158,7 @@ function fillTriangleFlatTopGouraud(triangle, contextData) {
   let b2 = syb2;
 
   for (let cy = tri[2][1]; cy >= tri[0][1]; cy--) {
-    const drx = (r2 - r1) / (crx - clx);
-    const dgx = (g2 - g1) / (crx - clx);
-    const dbx = (b2 - b1) / (crx - clx);
-    let r = r1;
-    let g = g1;
-    let b = b1;
-
-    for (let i = Math.floor(clx); i < Math.ceil(crx); i++) {
-      const base = (cy * contextData.width + i) * 4;
-      contextData.data[base] = r;
-      contextData.data[base + 1] = g;
-      contextData.data[base + 2] = b;
-      contextData.data[base + 3] = 255;
-      r += drx;
-      g += dgx;
-      b += dbx;
-    }
+    fillInclusiveScanline(contextData, cy, clx, crx, r1, g1, b1, r2, g2, b2);
 
     r1 += dyr1;
     g1 += dyg1;
