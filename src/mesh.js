@@ -1,4 +1,5 @@
 import * as mat4 from './math/mat4.js';
+import { Polygon } from './polygon.js';
 
 export class Mesh {
   /**
@@ -6,10 +7,9 @@ export class Mesh {
    */
   constructor(json) {
     this.vertices = json.vertices.map(v => [v.x, v.y, v.z]);
-    this.polygons = json.polygons.map(p => ({
-      color: p.color,
-      vertexIndices: [...p.vertexIndices],
-    }));
+    this.polygons = json.polygons.map(
+      p => new Polygon({ color: p.color, vertexIndices: p.vertexIndices }),
+    );
 
     this.position = { x: 0, y: 0, z: 0 };
     this.rotation = { x: 0, y: 0, z: 0 }; // Euler angles in radians, applied X→Y→Z

@@ -15,11 +15,20 @@ resize();
 window.addEventListener('resize', () => { resize(); draw(); });
 
 const cube = new Mesh(cubeData);
-cube.position.z = -4; // 4 units in front of the camera
+cube.position.z = -4;
 
+const cubeCenter = [cube.position.x, cube.position.y, cube.position.z];
+
+// 45° orbit around Y: corner view — two faces visible with backface culling
+const viewDistance = 4;
+const orbitY = Math.PI / 4;
 const camera = new Camera();
-camera.position = [0, 0, 0];
-camera.target   = [0, 0, -1]; // looking straight down −Z
+camera.position = [
+  cubeCenter[0] + viewDistance * Math.sin(orbitY),
+  cubeCenter[1],
+  cubeCenter[2] + viewDistance * Math.cos(orbitY),
+];
+camera.target = [...cubeCenter];
 
 function draw() {
   renderer.clear();

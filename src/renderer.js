@@ -1,4 +1,5 @@
 import * as mat4 from './math/mat4.js';
+import { cullBackFaces } from './culling.js';
 
 const FOV_Y = Math.PI / 3; // 60°
 const NEAR  = 0.1;
@@ -21,32 +22,38 @@ export class Renderer {
   }
 
   /**
-   * Assembles MVP = Projection * View * Model.
-   * @param {import('./mesh.js').Mesh}     mesh
-   * @param {import('./camera.js').Camera} camera
+   * Model-view matrix: View * Model (local → camera space).
    */
-  #buildMVP(mesh, camera) {
+  #buildMV(mesh, camera) {
     const model = mesh.getModelMatrix();
     const view  = camera.getViewMatrix();
-    const proj  = mat4.perspective(FOV_Y, this.aspectRatio, NEAR, FAR);
-    return mat4.multiply(proj, mat4.multiply(view, model));
+    return mat4.multiply(view, model);
+  }
+
+  #buildProjection() {
+    return mat4.perspective(FOV_Y, this.aspectRatio, NEAR, FAR);
+  }
+
+  /** Transform a local-space point through MV into camera-space [x, y, z]. */
+  #toCameraSpace(mv, vertex) {
+    const t = mat4.transformVec4(mv, [vertex[0], vertex[1], vertex[2], 1]);
+    return [t[0], t[1], t[2]];
   }
 
   /**
-   * Projects a local-space vertex through the MVP matrix into canvas pixel coords.
-   * Returns { x, y } in pixels (origin at canvas top-left, Y↓), or null when the
-   * vertex is behind the near plane (w ≤ 0).
+   * Projects a camera-space vertex through P into canvas pixel coords.
+   * Returns { x, y } or null when behind the near plane (w ≤ 0).
    */
-  #projectVertex(mvp, vertex) {
-    const clip = mat4.transformVec4(mvp, [vertex[0], vertex[1], vertex[2], 1]);
+  #projectVertex(proj, cameraVertex) {
+    const clip = mat4.transformVec4(proj, [
+      cameraVertex[0], cameraVertex[1], cameraVertex[2], 1,
+    ]);
     const w = clip[3];
     if (w <= 0) return null;
 
-    const ndcX =  clip[0] / w;
-    const ndcY =  clip[1] / w;
+    const ndcX = clip[0] / w;
+    const ndcY = clip[1] / w;
 
-    // Map NDC [−1,1] → pixel coords; centre of NDC maps to centre of canvas.
-    // Y is flipped because canvas Y increases downward.
     return {
       x: ( ndcX + 1) * 0.5 * this.width,
       y: (-ndcY + 1) * 0.5 * this.height,
@@ -55,19 +62,24 @@ export class Renderer {
 
   /**
    * Draws a single mesh as a coloured wireframe.
-   * @param {import('./mesh.js').Mesh}     mesh
-   * @param {import('./camera.js').Camera} camera
+   * Pipeline: MV → backface cull → P → draw visible polygons.
    */
   drawMesh(mesh, camera) {
-    const mvp = this.#buildMVP(mesh, camera);
+    const mv   = this.#buildMV(mesh, camera);
+    const proj = this.#buildProjection();
+
+    const cameraSpaceVerts = mesh.vertices.map(v => this.#toCameraSpace(mv, v));
+    cullBackFaces(mesh.polygons, cameraSpaceVerts);
+
     const ctx = this.ctx;
 
-    const projected = mesh.vertices.map(v => this.#projectVertex(mvp, v));
+    for (const poly of mesh.polygons) {
+      if (!poly.show) continue;
 
-    for (const { color, vertexIndices } of mesh.polygons) {
-      const pts = vertexIndices.map(i => projected[i]);
+      const pts = poly.vertexIndices.map(i =>
+        this.#projectVertex(proj, cameraSpaceVerts[i]),
+      );
 
-      // Skip the polygon if any vertex ended up behind the camera
       if (pts.some(p => p === null)) continue;
 
       ctx.beginPath();
@@ -76,7 +88,7 @@ export class Renderer {
         ctx.lineTo(pts[i].x, pts[i].y);
       }
       ctx.closePath();
-      ctx.strokeStyle = color;
+      ctx.strokeStyle = poly.color;
       ctx.lineWidth   = 1.5;
       ctx.stroke();
     }
