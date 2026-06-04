@@ -1,26 +1,32 @@
-import * as mat4 from './math/mat4.js';
-import { cullBackFaces } from './culling.js';
-import { drawGeneralTriangleGouraud } from './gouraud-shaded-rasterizer.js';
-import { triangleNormal } from './geometry.js';
-import { shadeVertex } from './lighting/shade-vertex.js';
+import * as mat4 from "./math/mat4.js";
+import { cullBackFaces } from "./culling.js";
+import { drawGeneralTriangleGouraud } from "./gouraud-shaded-rasterizer.js";
+import { triangleNormal } from "./geometry.js";
+import { shadeVertex } from "./lighting/shade-vertex.js";
 
 const FOV_Y = Math.PI / 3; // 60°
-const NEAR  = 0.1;
-const FAR   = 1000;
+const NEAR = 0.1;
+const FAR = 1000;
 const AMBIENT = 0.2;
 
 export class Renderer {
   /** @param {HTMLCanvasElement} canvas */
   constructor(canvas) {
     this.canvas = canvas;
-    this.ctx    = canvas.getContext('2d');
+    this.ctx = canvas.getContext("2d");
   }
 
-  get width()       { return this.canvas.width; }
-  get height()      { return this.canvas.height; }
-  get aspectRatio() { return this.width / this.height; }
+  get width() {
+    return this.canvas.width;
+  }
+  get height() {
+    return this.canvas.height;
+  }
+  get aspectRatio() {
+    return this.width / this.height;
+  }
 
-  clear(fillColor = '#000') {
+  clear(fillColor = "#000") {
     this.ctx.fillStyle = fillColor;
     this.ctx.fillRect(0, 0, this.width, this.height);
   }
@@ -40,14 +46,20 @@ export class Renderer {
 
   #toCameraSpace(view, worldVertex) {
     const t = mat4.transformVec4(view, [
-      worldVertex[0], worldVertex[1], worldVertex[2], 1,
+      worldVertex[0],
+      worldVertex[1],
+      worldVertex[2],
+      1,
     ]);
     return [t[0], t[1], t[2]];
   }
 
   #projectVertex(proj, cameraVertex) {
     const clip = mat4.transformVec4(proj, [
-      cameraVertex[0], cameraVertex[1], cameraVertex[2], 1,
+      cameraVertex[0],
+      cameraVertex[1],
+      cameraVertex[2],
+      1,
     ]);
     const w = clip[3];
     if (w <= 0) return null;
@@ -55,10 +67,7 @@ export class Renderer {
     const ndcX = clip[0] / w;
     const ndcY = clip[1] / w;
 
-    return [
-      ( ndcX + 1) * 0.5 * this.width,
-      (-ndcY + 1) * 0.5 * this.height,
-    ];
+    return [(ndcX + 1) * 0.5 * this.width, (-ndcY + 1) * 0.5 * this.height];
   }
 
   #toRasterPoint(point) {
@@ -79,18 +88,20 @@ export class Renderer {
    */
   render(mesh, camera, lights = []) {
     const model = mesh.getModelMatrix();
-    const view  = camera.getViewMatrix();
-    const proj  = this.#buildProjection();
+    const view = camera.getViewMatrix();
+    const proj = this.#buildProjection();
 
-    const worldVerts = mesh.vertices.map(v => this.#toWorldSpace(model, v));
+    const worldVerts = mesh.vertices.map((v) => this.#toWorldSpace(model, v));
 
-    const cameraSpaceVerts = worldVerts.map(w => this.#toCameraSpace(view, w));
-    cullBackFaces(mesh.polygons, cameraSpaceVerts);
+    const cameraSpaceVerts = worldVerts.map((w) =>
+      this.#toCameraSpace(view, w),
+    );
+    const culledPolygons = cullBackFaces(mesh.polygons, cameraSpaceVerts);
 
-    const projected = cameraSpaceVerts.map(v => this.#projectVertex(proj, v));
+    const projected = cameraSpaceVerts.map((v) => this.#projectVertex(proj, v));
     const contextData = this.#getContextData();
 
-    for (const poly of mesh.polygons) {
+    for (const poly of culledPolygons) {
       if (!poly.show) continue;
 
       const indices = poly.vertexIndices;

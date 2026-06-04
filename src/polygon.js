@@ -1,5 +1,5 @@
 /**
- * A mesh face defined by vertex indices and a visibility flag updated each frame.
+ * A mesh face defined by vertex indices and an optional visibility flag (e.g. after culling).
  */
 export class Polygon {
   /**
@@ -18,4 +18,12 @@ export class Polygon {
 
   get show() { return this._show; }
   set show(value) { this._show = value; }
+
+  clone() {
+    return new Polygon({
+      materialColor: this._materialColor,
+      vertexIndices: this._vertexIndices,
+      show: this._show,
+    });
+  }
 }
