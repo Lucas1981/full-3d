@@ -118,6 +118,32 @@ export class Renderer {
     return true;
   }
 
+  #drawGouraudPolygon(poly, indices, worldVerts, faceNormal, projected, lights, contextData) {
+    const triangle = [];
+
+    for (const i of indices) {
+      const screen = this.#toRasterPoint(projected[i]);
+      if (screen === null) {
+        triangle.length = 0;
+        break;
+      }
+
+      const lit = shadeVertex(
+        worldVerts[i],
+        faceNormal,
+        poly.materialColor,
+        lights,
+        AMBIENT,
+      );
+
+      triangle.push([screen[0], screen[1], lit[0], lit[1], lit[2]]);
+    }
+
+    if (triangle.length !== 3) return;
+
+    drawGeneralTriangleGouraud(triangle, contextData);
+  }
+
   render(mesh, camera, lights = []) {
     const model = mesh.getModelMatrix();
     const view = camera.getViewMatrix();
@@ -144,28 +170,9 @@ export class Renderer {
         continue;
       }
 
-      const triangle = [];
-      for (const i of indices) {
-        const screen = this.#toRasterPoint(projected[i]);
-        if (screen === null) {
-          triangle.length = 0;
-          break;
-        }
-
-        const lit = shadeVertex(
-          worldVerts[i],
-          faceNormal,
-          poly.materialColor,
-          lights,
-          AMBIENT,
-        );
-
-        triangle.push([screen[0], screen[1], lit[0], lit[1], lit[2]]);
-      }
-
-      if (triangle.length !== 3) continue;
-
-      drawGeneralTriangleGouraud(triangle, contextData);
+      this.#drawGouraudPolygon(
+        poly, indices, worldVerts, faceNormal, projected, lights, contextData,
+      );
     }
 
     this.ctx.putImageData(contextData, 0, 0);
