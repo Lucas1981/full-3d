@@ -1,113 +1,105 @@
 /**
- * Flat-shaded triangle rasterization (scanline).
- * Vertex format: [x, y, invZ]
+ * Flat-shaded triangle rasterization.
+ * Vertex format: [x, y, depth]
+ *   depth — camera-space depth (positive in front of camera), same as textured shader
  */
 
-function fillFlatScanline(contextData, zBuffer, cy, clx, crx, zl, zr, color) {
-  const left = Math.ceil(clx < crx ? clx : crx);
-  const right = Math.ceil(clx < crx ? crx : clx);
-  const span = right - left;
+import { inclusiveSpan, isDegenerateSpan } from './scanline.js';
 
-  const startZ = clx <= crx ? zl : zr;
-  const endZ = clx <= crx ? zr : zl;
+function plotFlatPixel(contextData, zBuffer, x, y, invZ, color) {
+  if (!zBuffer.tryCommit(x, y, invZ)) return;
 
-  if (span <= 0) {
-    if (!zBuffer.tryCommit(left, cy, startZ)) return;
+  const base = (y * contextData.width + x) * 4;
+  contextData.data[base] = color[0];
+  contextData.data[base + 1] = color[1];
+  contextData.data[base + 2] = color[2];
+  contextData.data[base + 3] = color[3];
+}
 
-    const base = (cy * contextData.width + left) * 4;
-    contextData.data[base] = color[0];
-    contextData.data[base + 1] = color[1];
-    contextData.data[base + 2] = color[2];
-    contextData.data[base + 3] = color[3];
+function fillFlatScanline(contextData, zBuffer, cy, cxl, cxr, zl, zr, color) {
+  const { left, right } = inclusiveSpan(cxl, cxr);
+
+  if (isDegenerateSpan(cxl, cxr)) {
+    plotFlatPixel(contextData, zBuffer, left, cy, zl, color);
     return;
   }
 
-  const dzx = (endZ - startZ) / span;
-  let z = startZ;
+  const dzx = (zr - zl) / (cxr - cxl);
+  let z = zl;
 
   for (let i = left; i <= right; i++) {
-    if (zBuffer.tryCommit(i, cy, z)) {
-      const base = (cy * contextData.width + i) * 4;
-      contextData.data[base] = color[0];
-      contextData.data[base + 1] = color[1];
-      contextData.data[base + 2] = color[2];
-      contextData.data[base + 3] = color[3];
-    }
+    plotFlatPixel(contextData, zBuffer, i, cy, z, color);
     z += dzx;
   }
 }
 
-function fillTriangleFlatBottom(triangle, color, contextData, zBuffer) {
-  const dxl =
-    (triangle[0][0] - triangle[2][0]) / (triangle[0][1] - triangle[2][1]);
-  const dxr =
-    (triangle[0][0] - triangle[1][0]) / (triangle[0][1] - triangle[1][1]);
-  const dyzl =
-    (triangle[2][2] - triangle[0][2]) / (triangle[2][1] - triangle[0][1]);
-  const dyzr =
-    (triangle[1][2] - triangle[0][2]) / (triangle[1][1] - triangle[0][1]);
-
-  let clx = triangle[0][0];
-  let crx = triangle[0][0];
-  let zl = triangle[0][2];
-  let zr = triangle[0][2];
-
-  for (let cy = triangle[0][1]; cy <= triangle[2][1]; cy++) {
-    fillFlatScanline(contextData, zBuffer, cy, clx, crx, zl, zr, color);
-
-    crx += dxr;
-    clx += dxl;
-    zl += dyzl;
-    zr += dyzr;
-  }
-}
-
-function fillTriangleFlatTop(triangle, color, contextData, zBuffer) {
-  const dxl =
-    (triangle[2][0] - triangle[0][0]) / (triangle[2][1] - triangle[0][1]);
-  const dxr =
-    (triangle[2][0] - triangle[1][0]) / (triangle[2][1] - triangle[1][1]);
-  const dyzl =
-    (triangle[0][2] - triangle[2][2]) / (triangle[2][1] - triangle[0][1]);
-  const dyzr =
-    (triangle[1][2] - triangle[2][2]) / (triangle[2][1] - triangle[1][1]);
-
-  let clx = triangle[2][0];
-  let crx = triangle[2][0];
-  let zl = triangle[2][2];
-  let zr = triangle[2][2];
-
-  for (let cy = triangle[2][1]; cy >= triangle[0][1]; cy--) {
-    fillFlatScanline(contextData, zBuffer, cy, clx, crx, zl, zr, color);
-
-    crx -= dxr;
-    clx -= dxl;
-    zl += dyzl;
-    zr += dyzr;
-  }
-}
-
 /**
- * Draw a flat-shaded triangle. Each vertex is [x, y, invZ].
+ * Draw a flat-shaded triangle. Each vertex is [x, y, depth].
  */
 export function drawGeneralTriangle(triangle, color, contextData, zBuffer) {
-  const tri = [...triangle].sort((a, b) => a[1] - b[1]);
+  const tri = triangle.map((t) => [...t]).sort((a, b) => a[1] - b[1]);
 
-  if (tri[1][1] === tri[2][1]) {
-    fillTriangleFlatBottom(tri, color, contextData, zBuffer);
-  } else if (tri[0][1] === tri[1][1]) {
-    fillTriangleFlatTop(tri, color, contextData, zBuffer);
+  const y1 = tri[0][1];
+  const y2 = tri[1][1];
+  const y3 = tri[2][1];
+
+  let dxdy1 = (tri[1][0] - tri[0][0]) / (tri[1][1] - tri[0][1]);
+  let dxdy2 = (tri[2][0] - tri[0][0]) / (tri[2][1] - tri[0][1]);
+
+  let cxl = tri[0][0];
+  let cxr = tri[0][0];
+
+  const szl = 1 / tri[0][2];
+  const ezl = 1 / tri[1][2];
+  const ezr = 1 / tri[2][2];
+
+  const dzl1 = (ezl - szl) / (y2 - y1);
+  const dzr2 = (ezr - szl) / (y3 - y1);
+
+  let dxl, dxr, dzdl, dzdr;
+
+  if (dxdy1 < dxdy2) {
+    dxl = dxdy1;
+    dxr = dxdy2;
+    dzdl = dzl1;
+    dzdr = dzr2;
   } else {
-    const v1 = [
-      tri[0][0] +
-        ((tri[2][0] - tri[0][0]) * (tri[1][1] - tri[0][1])) /
-          (tri[2][1] - tri[0][1]),
-      tri[1][1],
-      tri[0][2] +
-        ((tri[2][2] - tri[0][2]) / (tri[2][1] - tri[0][1])) *
-          (tri[1][1] - tri[0][1]),
-    ];
-    fillTriangleFlatBottom([tri[0], v1, tri[1]], color, contextData, zBuffer);
-    fillTriangleFlatTop([tri[1], v1, tri[2]], color, contextData, zBuffer);
+    dxl = dxdy2;
+    dxr = dxdy1;
+    dzdl = dzr2;
+    dzdr = dzl1;
+  }
+
+  let zl = szl;
+  let zr = szl;
+
+  for (let cy = y1; cy < y2; cy++) {
+    fillFlatScanline(contextData, zBuffer, cy, cxl, cxr, zl, zr, color);
+
+    zl += dzdl;
+    zr += dzdr;
+    cxl += dxl;
+    cxr += dxr;
+  }
+
+  if (dxdy1 < dxdy2) {
+    dxl = (tri[2][0] - tri[1][0]) / (tri[2][1] - tri[1][1]);
+    cxl = tri[1][0];
+    zl = ezl;
+    dzdl = (ezr - ezl) / (y3 - y2);
+  } else {
+    dxr = (tri[2][0] - tri[1][0]) / (tri[2][1] - tri[1][1]);
+    cxr = tri[1][0];
+    zr = ezl;
+    dzdr = (ezr - ezl) / (y3 - y2);
+  }
+
+  for (let cy = y2; cy < y3; cy++) {
+    fillFlatScanline(contextData, zBuffer, cy, cxl, cxr, zl, zr, color);
+
+    zl += dzdl;
+    zr += dzdr;
+    cxl += dxl;
+    cxr += dxr;
   }
 }

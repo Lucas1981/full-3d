@@ -1,6 +1,6 @@
-import * as mat4 from './math/mat4.js';
+import * as mat4 from '../math/mat4.js';
 import { Polygon } from './polygon.js';
-import { hexToRgba } from './color.js';
+import { hexToRgba } from '../utils/color.js';
 
 export class Mesh {
   /**

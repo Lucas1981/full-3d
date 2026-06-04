@@ -1,5 +1,5 @@
 import * as vec3 from "../math/vec3.js";
-import { LightType } from "../lights/light-types.js";
+import { LightType } from "./light-types.js";
 
 function clamp255(v) {
   return Math.max(0, Math.min(255, Math.round(v)));
@@ -23,7 +23,7 @@ function distanceAttenuation(dist, light) {
 /**
  * @param {number[]} worldNormal  Unit surface normal
  * @param {number[]} material
- * @param {import('../lights/directional-light.js').DirectionalLight} light
+ * @param {import('./directional-light.js').DirectionalLight} light
  * @returns {[number, number, number]}
  */
 export function generateDirectionalLight(worldNormal, material, light) {

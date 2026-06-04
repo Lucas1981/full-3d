@@ -1,11 +1,11 @@
-import * as mat4 from './math/mat4.js';
+import * as mat4 from '../math/mat4.js';
 import { cullBackFaces } from './culling.js';
-import { drawGeneralTriangle } from './shaders/flat-shade-rasterizer.js';
-import { drawGeneralTriangleGouraud } from './shaders/gouraud-shaded-rasterizer.js';
-import { drawGeneralTriangleGouraudTexture } from './shaders/gouraud-shaded-textured-rasterizer.js';
-import { triangleNormal } from './geometry.js';
-import { shadeVertex, shadeIntensity } from './lighting/shade-vertex.js';
-import { getTexture } from './textures/texture-cache.js';
+import { drawGeneralTriangle } from '../shaders/flat-shade-rasterizer.js';
+import { drawGeneralTriangleGouraud } from '../shaders/gouraud-shaded-rasterizer.js';
+import { drawGeneralTriangleGouraudTexture } from '../shaders/gouraud-shaded-textured-rasterizer.js';
+import { triangleNormal } from '../utils/geometry.js';
+import { shadeVertex, shadeIntensity } from '../lights/shade-vertex.js';
+import { getTexture } from '../textures/texture-cache.js';
 import { ZBuffer } from './z-buffer.js';
 
 const FOV_Y = Math.PI / 3;
@@ -148,7 +148,7 @@ export class Renderer {
         break;
       }
 
-      triangle.push([screen[0], screen[1], 1 / depth]);
+      triangle.push([screen[0], screen[1], depth]);
     }
 
     if (triangle.length !== 3) return;
@@ -180,7 +180,7 @@ export class Renderer {
         break;
       }
 
-      triangle.push([screen[0], screen[1], lit[0], lit[1], lit[2], 1 / depth]);
+      triangle.push([screen[0], screen[1], lit[0], lit[1], lit[2], depth]);
     }
 
     if (triangle.length !== 3) return;
@@ -223,7 +223,7 @@ export class Renderer {
   }
 
   /**
-   * @param {import('./mesh.js').Mesh[]} meshes  Drawn in order (later = on top without z-buffer).
+   * @param {import('../scene/mesh.js').Mesh[]} meshes  Drawn in order (later = on top without z-buffer).
    */
   render(meshes, camera, lights = []) {
     const view = camera.getViewMatrix();

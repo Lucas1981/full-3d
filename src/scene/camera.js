@@ -1,5 +1,5 @@
-import * as mat4 from './math/mat4.js';
-import * as vec3 from './math/vec3.js';
+import * as mat4 from '../math/mat4.js';
+import * as vec3 from '../math/vec3.js';
 
 /**
  * UVN camera.

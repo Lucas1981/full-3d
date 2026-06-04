@@ -1,6 +1,6 @@
-import { Mesh } from "./mesh.js";
-import { Renderer } from "./renderer.js";
-import { Camera } from "./camera.js";
+import { Mesh } from "./scene/mesh.js";
+import { Renderer } from "./rendering/renderer.js";
+import { Camera } from "./scene/camera.js";
 import { PointLight } from "./lights/point-light.js";
 import { DirectionalLight } from "./lights/directional-light.js";
 import { SpotLight } from "./lights/spot-light.js";

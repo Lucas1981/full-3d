@@ -4,7 +4,7 @@
  *   u, v — texture pixel coords; z — camera-space depth (positive in front of camera)
  */
 
-const SPAN_EPS = 1e-6;
+import { inclusiveSpan, isDegenerateSpan } from './scanline.js';
 
 function sampleTexturedPixel(texture, contextData, zBuffer, x, y, invZ, tu, tv, intensity) {
   if (!zBuffer.tryCommit(x, y, invZ)) return;
@@ -29,10 +29,9 @@ function sampleTexturedPixel(texture, contextData, zBuffer, x, y, invZ, tu, tv, 
 }
 
 function fillTexturedScanline(texture, contextData, zBuffer, cy, cxl, cxr, ul, vl, zl, il, ur, vr, zr, ir) {
-  const left = Math.ceil(Math.min(cxl, cxr));
-  const right = Math.ceil(Math.max(cxl, cxr));
+  const { left, right } = inclusiveSpan(cxl, cxr);
 
-  if (Math.abs(cxr - cxl) < SPAN_EPS) {
+  if (isDegenerateSpan(cxl, cxr)) {
     sampleTexturedPixel(texture, contextData, zBuffer, left, cy, zl, ul / zl, vl / zl, il);
     return;
   }

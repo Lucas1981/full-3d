@@ -1,4 +1,4 @@
-import * as vec3 from './math/vec3.js';
+import * as vec3 from '../math/vec3.js';
 
 /**
  * View-space backface culling.

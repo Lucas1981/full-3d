@@ -1,4 +1,4 @@
-import * as vec3 from './math/vec3.js';
+import * as vec3 from '../math/vec3.js';
 
 /** Unit face normal from three world-space triangle vertices (winding-dependent). */
 export function triangleNormal(v0, v1, v2) {
