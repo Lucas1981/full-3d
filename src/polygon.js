@@ -3,16 +3,16 @@
  */
 export class Polygon {
   /**
-   * @param {{ color: string, vertexIndices: number[], show?: boolean }} data
+   * @param {{ materialColor: number[], vertexIndices: number[], show?: boolean }} data
    */
-  constructor({ color, vertexIndices, show = true }) {
-    this._color          = color;
+  constructor({ materialColor, vertexIndices, show = true }) {
+    this._materialColor  = [...materialColor];
     this._vertexIndices  = [...vertexIndices];
     this._show           = show;
   }
 
-  get color() { return this._color; }
-  set color(value) { this._color = value; }
+  get materialColor() { return this._materialColor; }
+  set materialColor(value) { this._materialColor = [...value]; }
 
   get vertexIndices() { return this._vertexIndices; }
 

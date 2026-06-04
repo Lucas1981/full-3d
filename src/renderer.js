@@ -1,11 +1,13 @@
 import * as mat4 from './math/mat4.js';
 import { cullBackFaces } from './culling.js';
-import { drawGeneralTriangle } from './flat-shade-rasterizer.js';
-import { hexToRgba } from './color.js';
+import { drawGeneralTriangleGouraud } from './gouraud-shaded-rasterizer.js';
+import { triangleNormal } from './geometry.js';
+import { shadeVertex } from './lighting/shade-vertex.js';
 
 const FOV_Y = Math.PI / 3; // 60°
 const NEAR  = 0.1;
 const FAR   = 1000;
+const AMBIENT = 0.2;
 
 export class Renderer {
   /** @param {HTMLCanvasElement} canvas */
@@ -23,30 +25,26 @@ export class Renderer {
     this.ctx.fillRect(0, 0, this.width, this.height);
   }
 
-  /** ImageData buffer the rasterizer writes into. */
   #getContextData() {
     return this.ctx.getImageData(0, 0, this.width, this.height);
-  }
-
-  #buildMV(mesh, camera) {
-    const model = mesh.getModelMatrix();
-    const view  = camera.getViewMatrix();
-    return mat4.multiply(view, model);
   }
 
   #buildProjection() {
     return mat4.perspective(FOV_Y, this.aspectRatio, NEAR, FAR);
   }
 
-  #toCameraSpace(mv, vertex) {
-    const t = mat4.transformVec4(mv, [vertex[0], vertex[1], vertex[2], 1]);
+  #toWorldSpace(model, vertex) {
+    const t = mat4.transformVec4(model, [vertex[0], vertex[1], vertex[2], 1]);
     return [t[0], t[1], t[2]];
   }
 
-  /**
-   * Projects a camera-space vertex through P into canvas pixel coords [x, y].
-   * Returns null when behind the near plane (w ≤ 0).
-   */
+  #toCameraSpace(view, worldVertex) {
+    const t = mat4.transformVec4(view, [
+      worldVertex[0], worldVertex[1], worldVertex[2], 1,
+    ]);
+    return [t[0], t[1], t[2]];
+  }
+
   #projectVertex(proj, cameraVertex) {
     const clip = mat4.transformVec4(proj, [
       cameraVertex[0], cameraVertex[1], cameraVertex[2], 1,
@@ -63,11 +61,6 @@ export class Renderer {
     ];
   }
 
-  /**
-   * Round to integer pixel coords and clamp to the canvas so raster indices stay valid.
-   * @param {[number, number] | null} point
-   * @returns {[number, number] | null}
-   */
   #toRasterPoint(point) {
     if (point === null) return null;
 
@@ -81,14 +74,17 @@ export class Renderer {
   }
 
   /**
-   * Flat-shaded solid render.
-   * Pipeline: MV → backface cull → P → rasterize visible triangles.
+   * Gouraud-shaded render.
+   * Pipeline: M → per-vertex lighting (world) → V → cull → P → rasterize.
    */
-  render(mesh, camera) {
-    const mv   = this.#buildMV(mesh, camera);
-    const proj = this.#buildProjection();
+  render(mesh, camera, lights = []) {
+    const model = mesh.getModelMatrix();
+    const view  = camera.getViewMatrix();
+    const proj  = this.#buildProjection();
 
-    const cameraSpaceVerts = mesh.vertices.map(v => this.#toCameraSpace(mv, v));
+    const worldVerts = mesh.vertices.map(v => this.#toWorldSpace(model, v));
+
+    const cameraSpaceVerts = worldVerts.map(w => this.#toCameraSpace(view, w));
     cullBackFaces(mesh.polygons, cameraSpaceVerts);
 
     const projected = cameraSpaceVerts.map(v => this.#projectVertex(proj, v));
@@ -97,10 +93,34 @@ export class Renderer {
     for (const poly of mesh.polygons) {
       if (!poly.show) continue;
 
-      const triangle = poly.vertexIndices.map(i => this.#toRasterPoint(projected[i]));
-      if (triangle.some(p => p === null)) continue;
+      const indices = poly.vertexIndices;
+      const w0 = worldVerts[indices[0]];
+      const w1 = worldVerts[indices[1]];
+      const w2 = worldVerts[indices[2]];
+      const faceNormal = triangleNormal(w0, w1, w2);
 
-      drawGeneralTriangle(triangle, hexToRgba(poly.color), contextData);
+      const triangle = [];
+      for (const i of indices) {
+        const screen = this.#toRasterPoint(projected[i]);
+        if (screen === null) {
+          triangle.length = 0;
+          break;
+        }
+
+        const lit = shadeVertex(
+          worldVerts[i],
+          faceNormal,
+          poly.materialColor,
+          lights,
+          AMBIENT,
+        );
+
+        triangle.push([screen[0], screen[1], lit[0], lit[1], lit[2]]);
+      }
+
+      if (triangle.length !== 3) continue;
+
+      drawGeneralTriangleGouraud(triangle, contextData);
     }
 
     this.ctx.putImageData(contextData, 0, 0);

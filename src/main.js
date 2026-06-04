@@ -1,6 +1,7 @@
 import { Mesh }     from './mesh.js';
 import { Renderer } from './renderer.js';
 import { Camera }   from './camera.js';
+import { DirectionalLight } from './lights/directional-light.js';
 import cubeData     from './assets/cube.json';
 
 const canvas   = document.getElementById('canvas');
@@ -12,14 +13,13 @@ function resize() {
 }
 
 resize();
-window.addEventListener('resize', () => { resize(); draw(); });
+window.addEventListener('resize', resize);
 
 const cube = new Mesh(cubeData);
 cube.position.z = -4;
 
 const cubeCenter = [cube.position.x, cube.position.y, cube.position.z];
 
-// 45° orbit around Y: corner view — two faces visible with backface culling
 const viewDistance = 4;
 const orbitY = Math.PI / 4;
 const camera = new Camera();
@@ -30,9 +30,28 @@ camera.position = [
 ];
 camera.target = [...cubeCenter];
 
-function draw() {
+// Light at origin, shining toward the cube (−Z)
+const lights = [
+  new DirectionalLight({
+    direction: [0, 0, -1],
+    color: [255, 255, 255],
+    intensity: 0.85,
+  }),
+];
+
+const ROTATION_SPEED = 0.8; // radians per second around Y
+let lastTime = performance.now();
+
+function frame(now) {
+  const dt = (now - lastTime) / 1000;
+  lastTime = now;
+
+  cube.rotation.y += ROTATION_SPEED * dt;
+
   renderer.clear();
-  renderer.render(cube, camera);
+  renderer.render(cube, camera, lights);
+
+  requestAnimationFrame(frame);
 }
 
-draw();
+requestAnimationFrame(frame);

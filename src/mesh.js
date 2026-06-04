@@ -1,5 +1,6 @@
 import * as mat4 from './math/mat4.js';
 import { Polygon } from './polygon.js';
+import { hexToRgba } from './color.js';
 
 export class Mesh {
   /**
@@ -8,7 +9,10 @@ export class Mesh {
   constructor(json) {
     this.vertices = json.vertices.map(v => [v.x, v.y, v.z]);
     this.polygons = json.polygons.map(
-      p => new Polygon({ color: p.color, vertexIndices: p.vertexIndices }),
+      p => new Polygon({
+        materialColor: hexToRgba(p.color),
+        vertexIndices: p.vertexIndices,
+      }),
     );
 
     this.position = { x: 0, y: 0, z: 0 };
