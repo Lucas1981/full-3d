@@ -14,6 +14,7 @@ export class Mesh {
         vertexIndices: p.vertexIndices,
         texture: p.texture ?? null,
         uvs: p.uvs ?? null,
+        shade: p.shade ?? 'gouraud',
       }),
     );
 

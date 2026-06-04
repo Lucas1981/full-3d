@@ -19,20 +19,27 @@ function resize() {
 resize();
 window.addEventListener("resize", resize);
 
-const cube = new Mesh(cubeData);
-cube.position.z = -4;
+const cubeFront = new Mesh(cubeData);
+cubeFront.position.z = -4;
 
-const cubeCenter = [cube.position.x, cube.position.y, cube.position.z];
+const cubeBack = new Mesh(cubeData);
+cubeBack.position.x = 0.9;
+cubeBack.position.z = -5.8;
+
+/** Front cube first, back cube last — back is drawn on top despite being farther away. */
+const meshes = [cubeFront, cubeBack];
+
+const sceneCenter = [cubeFront.position.x, cubeFront.position.y, cubeFront.position.z];
 
 const viewDistance = 4;
 const orbitY = Math.PI / 4;
 const camera = new Camera();
 camera.position = [
-  cubeCenter[0] + viewDistance * Math.sin(orbitY),
-  cubeCenter[1],
-  cubeCenter[2] + viewDistance * Math.cos(orbitY),
+  sceneCenter[0] + viewDistance * Math.sin(orbitY),
+  sceneCenter[1],
+  sceneCenter[2] + viewDistance * Math.cos(orbitY),
 ];
-camera.target = [...cubeCenter];
+camera.target = [...sceneCenter];
 
 const directionalLight = new DirectionalLight({
   direction: [0, 0, -1],
@@ -41,14 +48,13 @@ const directionalLight = new DirectionalLight({
 });
 
 const pointLight = new PointLight({
-  position: [3, cubeCenter[1] + 2.5, cubeCenter[2]],
+  position: [3, sceneCenter[1] + 2.5, sceneCenter[2]],
   color: [255, 240, 220],
   intensity: 1.4,
 });
 
-// Side + below, aimed at the camera-visible corner of the cube
 const spotPosition = [3.5, -2.2, -2.8];
-const spotBaseDirection = vec3.normalize(vec3.sub(cubeCenter, spotPosition));
+const spotBaseDirection = vec3.normalize(vec3.sub(sceneCenter, spotPosition));
 
 const spotLight = new SpotLight({
   position: spotPosition,
@@ -76,15 +82,15 @@ function frame(now) {
   const dt = (now - lastTime) / 1000;
   lastTime = now;
 
-  cube.rotation.y += CUBE_ROTATION_SPEED * dt;
+  cubeFront.rotation.y += CUBE_ROTATION_SPEED * dt;
   orbitAngle += LIGHT_ORBIT_SPEED * dt;
   spotSwingPhase += SPOT_SWING_SPEED * dt;
 
   pointLight.position[0] =
-    cubeCenter[0] + LIGHT_ORBIT_RADIUS * Math.sin(orbitAngle);
-  pointLight.position[1] = cubeCenter[1] + LIGHT_ORBIT_HEIGHT;
+    sceneCenter[0] + LIGHT_ORBIT_RADIUS * Math.sin(orbitAngle);
+  pointLight.position[1] = sceneCenter[1] + LIGHT_ORBIT_HEIGHT;
   pointLight.position[2] =
-    cubeCenter[2] + LIGHT_ORBIT_RADIUS * Math.cos(orbitAngle);
+    sceneCenter[2] + LIGHT_ORBIT_RADIUS * Math.cos(orbitAngle);
 
   const swing = Math.sin(spotSwingPhase) * SPOT_SWING_ANGLE;
   const cos = Math.cos(swing);
@@ -96,11 +102,13 @@ function frame(now) {
   ]);
 
   renderer.clear();
-  renderer.render(cube, camera, lights);
+  renderer.render(meshes, camera, lights);
 
   requestAnimationFrame(frame);
 }
 
-preloadTextures(cube.getTextureNames()).then(() => {
+const textureNames = [...new Set(meshes.flatMap((m) => m.getTextureNames()))];
+
+preloadTextures(textureNames).then(() => {
   requestAnimationFrame(frame);
 });

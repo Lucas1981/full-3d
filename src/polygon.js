@@ -8,14 +8,23 @@ export class Polygon {
    *   vertexIndices: number[],
    *   texture?: string | null,
    *   uvs?: number[][],
+   *   shade?: 'flat' | 'gouraud',
    *   show?: boolean,
    * }} data
    */
-  constructor({ materialColor, vertexIndices, texture = null, uvs = null, show = true }) {
+  constructor({
+    materialColor,
+    vertexIndices,
+    texture = null,
+    uvs = null,
+    shade = 'gouraud',
+    show = true,
+  }) {
     this._materialColor  = [...materialColor];
     this._vertexIndices  = [...vertexIndices];
     this._texture        = texture;
     this._uvs            = uvs ? uvs.map(([u, v]) => [u, v]) : null;
+    this._shade          = shade;
     this._show           = show;
   }
 
@@ -34,6 +43,10 @@ export class Polygon {
     this._uvs = value ? value.map(([u, v]) => [u, v]) : null;
   }
 
+  /** Untextured faces: 'flat' (one lit color) or 'gouraud' (per-vertex color). */
+  get shade() { return this._shade; }
+  set shade(value) { this._shade = value; }
+
   get show() { return this._show; }
   set show(value) { this._show = value; }
 
@@ -43,6 +56,7 @@ export class Polygon {
       vertexIndices: this._vertexIndices,
       texture: this._texture,
       uvs: this._uvs,
+      shade: this._shade,
       show: this._show,
     });
   }
