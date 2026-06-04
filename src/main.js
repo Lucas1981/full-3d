@@ -32,7 +32,7 @@ camera.target = [...cubeCenter];
 
 function draw() {
   renderer.clear();
-  renderer.drawMesh(cube, camera);
+  renderer.render(cube, camera);
 }
 
 draw();
