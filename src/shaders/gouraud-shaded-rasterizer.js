@@ -4,7 +4,13 @@
  *   depth — camera-space depth (positive in front of camera), same as textured shader
  */
 
-import { inclusiveSpan, isDegenerateSpan } from './scanline.js';
+import {
+  inclusiveSpan,
+  isDegenerateSpan,
+  clampMaxHorizontal,
+  clampMaxVertical,
+  isSpanPastRightEdge,
+} from './scanline.js';
 
 function plotGouraudPixel(contextData, zBuffer, x, y, invZ, r, g, b) {
   if (!zBuffer.tryCommit(x, y, invZ)) return;
@@ -19,6 +25,7 @@ function plotGouraudPixel(contextData, zBuffer, x, y, invZ, r, g, b) {
 function fillGouraudScanline(
   contextData,
   zBuffer,
+  width,
   cy,
   cxl,
   cxr,
@@ -32,9 +39,14 @@ function fillGouraudScanline(
   zr,
 ) {
   const { left, right } = inclusiveSpan(cxl, cxr);
+  if (isSpanPastRightEdge(left, width)) return;
+
+  const drawRight = clampMaxHorizontal(right, width);
 
   if (isDegenerateSpan(cxl, cxr)) {
-    plotGouraudPixel(contextData, zBuffer, left, cy, zl, rl, gl, bl);
+    if (left <= drawRight) {
+      plotGouraudPixel(contextData, zBuffer, left, cy, zl, rl, gl, bl);
+    }
     return;
   }
 
@@ -47,7 +59,7 @@ function fillGouraudScanline(
   let b = bl;
   let z = zl;
 
-  for (let i = left; i <= right; i++) {
+  for (let i = left; i <= drawRight; i++) {
     plotGouraudPixel(contextData, zBuffer, i, cy, z, r, g, b);
     r += drx;
     g += dgx;
@@ -60,11 +72,16 @@ function fillGouraudScanline(
  * Draw a Gouraud triangle. Each vertex is [x, y, r, g, b, depth].
  */
 export function drawGeneralTriangleGouraud(triangle, contextData, zBuffer) {
+  const width = contextData.width;
+  const height = contextData.height;
+
   const tri = triangle.map((t) => [...t]).sort((a, b) => a[1] - b[1]);
 
   const y1 = tri[0][1];
   const y2 = tri[1][1];
   const y3 = tri[2][1];
+
+  if (y1 >= height) return;
 
   let dxdy1 = (tri[1][0] - tri[0][0]) / (tri[1][1] - tri[0][1]);
   let dxdy2 = (tri[2][0] - tri[0][0]) / (tri[2][1] - tri[0][1]);
@@ -129,9 +146,9 @@ export function drawGeneralTriangleGouraud(triangle, contextData, zBuffer) {
   let br = sbl;
   let zr = szl;
 
-  for (let cy = y1; cy < y2; cy++) {
+  for (let cy = y1; cy < clampMaxVertical(y2, height); cy++) {
     fillGouraudScanline(
-      contextData, zBuffer, cy, cxl, cxr, rl, gl, bl, zl, rr, gr, br, zr,
+      contextData, zBuffer, width, cy, cxl, cxr, rl, gl, bl, zl, rr, gr, br, zr,
     );
 
     rl += drdl;
@@ -170,9 +187,9 @@ export function drawGeneralTriangleGouraud(triangle, contextData, zBuffer) {
     dzdr = (ezr - ezl) / (y3 - y2);
   }
 
-  for (let cy = y2; cy < y3; cy++) {
+  for (let cy = y2; cy < clampMaxVertical(y3, height); cy++) {
     fillGouraudScanline(
-      contextData, zBuffer, cy, cxl, cxr, rl, gl, bl, zl, rr, gr, br, zr,
+      contextData, zBuffer, width, cy, cxl, cxr, rl, gl, bl, zl, rr, gr, br, zr,
     );
 
     rl += drdl;

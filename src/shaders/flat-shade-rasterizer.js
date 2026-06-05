@@ -4,7 +4,13 @@
  *   depth — camera-space depth (positive in front of camera), same as textured shader
  */
 
-import { inclusiveSpan, isDegenerateSpan } from './scanline.js';
+import {
+  inclusiveSpan,
+  isDegenerateSpan,
+  clampMaxHorizontal,
+  clampMaxVertical,
+  isSpanPastRightEdge,
+} from './scanline.js';
 
 function plotFlatPixel(contextData, zBuffer, x, y, invZ, color) {
   if (!zBuffer.tryCommit(x, y, invZ)) return;
@@ -16,18 +22,23 @@ function plotFlatPixel(contextData, zBuffer, x, y, invZ, color) {
   contextData.data[base + 3] = color[3];
 }
 
-function fillFlatScanline(contextData, zBuffer, cy, cxl, cxr, zl, zr, color) {
+function fillFlatScanline(contextData, zBuffer, width, cy, cxl, cxr, zl, zr, color) {
   const { left, right } = inclusiveSpan(cxl, cxr);
+  if (isSpanPastRightEdge(left, width)) return;
+
+  const drawRight = clampMaxHorizontal(right, width);
 
   if (isDegenerateSpan(cxl, cxr)) {
-    plotFlatPixel(contextData, zBuffer, left, cy, zl, color);
+    if (left <= drawRight) {
+      plotFlatPixel(contextData, zBuffer, left, cy, zl, color);
+    }
     return;
   }
 
   const dzx = (zr - zl) / (cxr - cxl);
   let z = zl;
 
-  for (let i = left; i <= right; i++) {
+  for (let i = left; i <= drawRight; i++) {
     plotFlatPixel(contextData, zBuffer, i, cy, z, color);
     z += dzx;
   }
@@ -37,11 +48,16 @@ function fillFlatScanline(contextData, zBuffer, cy, cxl, cxr, zl, zr, color) {
  * Draw a flat-shaded triangle. Each vertex is [x, y, depth].
  */
 export function drawGeneralTriangle(triangle, color, contextData, zBuffer) {
+  const width = contextData.width;
+  const height = contextData.height;
+
   const tri = triangle.map((t) => [...t]).sort((a, b) => a[1] - b[1]);
 
   const y1 = tri[0][1];
   const y2 = tri[1][1];
   const y3 = tri[2][1];
+
+  if (y1 >= height) return;
 
   let dxdy1 = (tri[1][0] - tri[0][0]) / (tri[1][1] - tri[0][1]);
   let dxdy2 = (tri[2][0] - tri[0][0]) / (tri[2][1] - tri[0][1]);
@@ -73,8 +89,8 @@ export function drawGeneralTriangle(triangle, color, contextData, zBuffer) {
   let zl = szl;
   let zr = szl;
 
-  for (let cy = y1; cy < y2; cy++) {
-    fillFlatScanline(contextData, zBuffer, cy, cxl, cxr, zl, zr, color);
+  for (let cy = y1; cy < clampMaxVertical(y2, height); cy++) {
+    fillFlatScanline(contextData, zBuffer, width, cy, cxl, cxr, zl, zr, color);
 
     zl += dzdl;
     zr += dzdr;
@@ -94,8 +110,8 @@ export function drawGeneralTriangle(triangle, color, contextData, zBuffer) {
     dzdr = (ezr - ezl) / (y3 - y2);
   }
 
-  for (let cy = y2; cy < y3; cy++) {
-    fillFlatScanline(contextData, zBuffer, cy, cxl, cxr, zl, zr, color);
+  for (let cy = y2; cy < clampMaxVertical(y3, height); cy++) {
+    fillFlatScanline(contextData, zBuffer, width, cy, cxl, cxr, zl, zr, color);
 
     zl += dzdl;
     zr += dzdr;

@@ -77,18 +77,6 @@ export class Renderer {
     return [(ndcX + 1) * 0.5 * this.width, (-ndcY + 1) * 0.5 * this.height];
   }
 
-  #toRasterPoint(point) {
-    if (point === null) return null;
-
-    const x = Math.round(point[0]);
-    const y = Math.round(point[1]);
-
-    return [
-      Math.max(0, Math.min(this.width - 1, x)),
-      Math.max(0, Math.min(this.height - 1, y)),
-    ];
-  }
-
   #drawTexturedPolygon(
     poly,
     indices,
@@ -109,7 +97,8 @@ export class Renderer {
 
     for (let corner = 0; corner < 3; corner++) {
       const i = indices[corner];
-      const screen = this.#toRasterPoint(projected[i]);
+      const screen = projected[i].map(Math.round);
+      console.log("screen", screen);
       const depth = -cameraSpaceVerts[i][2];
 
       if (screen === null || depth <= 0) {
@@ -173,7 +162,7 @@ export class Renderer {
     const triangle = [];
 
     for (const i of indices) {
-      const screen = this.#toRasterPoint(projected[i]);
+      const screen = projected[i];
       const depth = -cameraSpaceVerts[i][2];
 
       if (screen === null || depth <= 0) {
@@ -203,7 +192,7 @@ export class Renderer {
     const triangle = [];
 
     for (const i of indices) {
-      const screen = this.#toRasterPoint(projected[i]);
+      const screen = projected[i];
       if (screen === null) {
         triangle.length = 0;
         break;

@@ -12,7 +12,7 @@ const CUBE_ROTATION_SPEED = 0.8;
 const LIGHT_ORBIT_RADIUS = 3.5;
 const LIGHT_ORBIT_HEIGHT = 2.5;
 const LIGHT_ORBIT_SPEED = CUBE_ROTATION_SPEED * 3;
-const SPOT_SWING_SPEED = 1.1;
+const SPOT_SWING_SPEED = 0.5;
 const SPOT_SWING_ANGLE = 0.45;
 
 const canvas = document.getElementById("canvas");
@@ -28,8 +28,10 @@ window.addEventListener("resize", resize);
 
 const cubeFront = new Mesh(cubeData);
 cubeFront.position.z = -4;
+const cubeBack = new Mesh(cubeData);
+cubeBack.position.z = -4;
 
-const meshes = [cubeFront];
+const meshes = [cubeFront, cubeBack];
 
 const sceneCenter = [
   cubeFront.position.x,
@@ -98,7 +100,8 @@ function frame(now) {
   //   spotBaseDirection[0] * sin + spotBaseDirection[2] * cos,
   // ]);
 
-  cubeFront.position.x = 20 * Math.sin(spotSwingPhase);
+  cubeFront.position.x = 8 * Math.sin(spotSwingPhase);
+  cubeBack.position.y = 8 * Math.sin(spotSwingPhase);
 
   renderer.clear();
   renderer.render(meshes, camera, lights);

@@ -10,3 +10,18 @@ export function inclusiveSpan(cxl, cxr) {
 export function isDegenerateSpan(cxl, cxr) {
   return Math.abs(cxr - cxl) < SPAN_EPS;
 }
+
+/** Clamp inclusive horizontal end to the right screen edge (no interpolant fix needed). */
+export function clampMaxHorizontal(right, width) {
+  return Math.min(right, width - 1);
+}
+
+/** Clamp exclusive vertical loop end to the bottom screen edge. */
+export function clampMaxVertical(yEnd, height) {
+  return Math.min(yEnd, height);
+}
+
+/** Span is entirely past the right edge of the screen. */
+export function isSpanPastRightEdge(left, width) {
+  return left > width - 1;
+}

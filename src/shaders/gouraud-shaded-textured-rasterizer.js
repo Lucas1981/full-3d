@@ -4,7 +4,13 @@
  *   u, v — texture pixel coords; z — camera-space depth (positive in front of camera)
  */
 
-import { inclusiveSpan, isDegenerateSpan } from './scanline.js';
+import {
+  inclusiveSpan,
+  isDegenerateSpan,
+  clampMaxHorizontal,
+  clampMaxVertical,
+  isSpanPastRightEdge,
+} from './scanline.js';
 
 function sampleTexturedPixel(texture, contextData, zBuffer, x, y, invZ, tu, tv, intensity) {
   if (!zBuffer.tryCommit(x, y, invZ)) return;
@@ -28,11 +34,32 @@ function sampleTexturedPixel(texture, contextData, zBuffer, x, y, invZ, tu, tv, 
   contextData.data[contextBase + 3] = 255;
 }
 
-function fillTexturedScanline(texture, contextData, zBuffer, cy, cxl, cxr, ul, vl, zl, il, ur, vr, zr, ir) {
+function fillTexturedScanline(
+  texture,
+  contextData,
+  zBuffer,
+  width,
+  cy,
+  cxl,
+  cxr,
+  ul,
+  vl,
+  zl,
+  il,
+  ur,
+  vr,
+  zr,
+  ir,
+) {
   const { left, right } = inclusiveSpan(cxl, cxr);
+  if (isSpanPastRightEdge(left, width)) return;
+
+  const drawRight = clampMaxHorizontal(right, width);
 
   if (isDegenerateSpan(cxl, cxr)) {
-    sampleTexturedPixel(texture, contextData, zBuffer, left, cy, zl, ul / zl, vl / zl, il);
+    if (left <= drawRight) {
+      sampleTexturedPixel(texture, contextData, zBuffer, left, cy, zl, ul / zl, vl / zl, il);
+    }
     return;
   }
 
@@ -45,7 +72,7 @@ function fillTexturedScanline(texture, contextData, zBuffer, cy, cxl, cxr, ul, v
   let z = zl;
   let intensity = il;
 
-  for (let i = left; i <= right; i++) {
+  for (let i = left; i <= drawRight; i++) {
     sampleTexturedPixel(texture, contextData, zBuffer, i, cy, z, u / z, v / z, intensity);
     u += dux;
     v += dvx;
@@ -58,11 +85,16 @@ function fillTexturedScanline(texture, contextData, zBuffer, cy, cxl, cxr, ul, v
  * Draw a textured triangle with Gouraud intensity and perspective-correct UV.
  */
 export function drawGeneralTriangleGouraudTexture(triangle, texture, contextData, zBuffer) {
+  const width = contextData.width;
+  const height = contextData.height;
+
   const tri = triangle.map((t) => [...t]).sort((a, b) => a[1] - b[1]);
 
   const y1 = tri[0][1];
   const y2 = tri[1][1];
   const y3 = tri[2][1];
+
+  if (y1 >= height) return;
 
   let dxdy1 = (tri[1][0] - tri[0][0]) / (tri[1][1] - tri[0][1]);
   let dxdy2 = (tri[2][0] - tri[0][0]) / (tri[2][1] - tri[0][1]);
@@ -131,8 +163,10 @@ export function drawGeneralTriangleGouraudTexture(triangle, texture, contextData
   let zr = syz1;
   let ir = syi1;
 
-  for (let cy = y1; cy < y2; cy++) {
-    fillTexturedScanline(texture, contextData, zBuffer, cy, cxl, cxr, ul, vl, zl, il, ur, vr, zr, ir);
+  for (let cy = y1; cy < clampMaxVertical(y2, height); cy++) {
+    fillTexturedScanline(
+      texture, contextData, zBuffer, width, cy, cxl, cxr, ul, vl, zl, il, ur, vr, zr, ir,
+    );
 
     ul += dyul;
     vl += dyvl;
@@ -171,8 +205,10 @@ export function drawGeneralTriangleGouraudTexture(triangle, texture, contextData
     dyir = (eyi2 - eyi1) / (y3 - y2);
   }
 
-  for (let cy = y2; cy < y3; cy++) {
-    fillTexturedScanline(texture, contextData, zBuffer, cy, cxl, cxr, ul, vl, zl, il, ur, vr, zr, ir);
+  for (let cy = y2; cy < clampMaxVertical(y3, height); cy++) {
+    fillTexturedScanline(
+      texture, contextData, zBuffer, width, cy, cxl, cxr, ul, vl, zl, il, ur, vr, zr, ir,
+    );
 
     ul += dyul;
     vl += dyvl;
