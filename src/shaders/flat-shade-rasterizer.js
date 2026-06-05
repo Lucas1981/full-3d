@@ -8,8 +8,13 @@ import {
   inclusiveSpan,
   isDegenerateSpan,
   clampMaxHorizontal,
+  clampMinHorizontal,
   clampMaxVertical,
   isSpanPastRightEdge,
+  isSpanPastLeftEdge,
+  isTriangleAboveScreen,
+  clipMinVerticalStart,
+  lerpAlongEdge,
 } from './scanline.js';
 
 function plotFlatPixel(contextData, zBuffer, x, y, invZ, color) {
@@ -24,21 +29,21 @@ function plotFlatPixel(contextData, zBuffer, x, y, invZ, color) {
 
 function fillFlatScanline(contextData, zBuffer, width, cy, cxl, cxr, zl, zr, color) {
   const { left, right } = inclusiveSpan(cxl, cxr);
-  if (isSpanPastRightEdge(left, width)) return;
+  if (isSpanPastRightEdge(left, width) || isSpanPastLeftEdge(right)) return;
 
+  const drawLeft = clampMinHorizontal(left);
   const drawRight = clampMaxHorizontal(right, width);
+  if (drawLeft > drawRight) return;
 
   if (isDegenerateSpan(cxl, cxr)) {
-    if (left <= drawRight) {
-      plotFlatPixel(contextData, zBuffer, left, cy, zl, color);
-    }
+    plotFlatPixel(contextData, zBuffer, drawLeft, cy, zl, color);
     return;
   }
 
   const dzx = (zr - zl) / (cxr - cxl);
-  let z = zl;
+  let z = lerpAlongEdge(cxl, cxr, zl, zr, drawLeft);
 
-  for (let i = left; i <= drawRight; i++) {
+  for (let i = drawLeft; i <= drawRight; i++) {
     plotFlatPixel(contextData, zBuffer, i, cy, z, color);
     z += dzx;
   }
@@ -57,7 +62,7 @@ export function drawGeneralTriangle(triangle, color, contextData, zBuffer) {
   const y2 = tri[1][1];
   const y3 = tri[2][1];
 
-  if (y1 >= height) return;
+  if (y1 >= height || isTriangleAboveScreen(y3)) return;
 
   let dxdy1 = (tri[1][0] - tri[0][0]) / (tri[1][1] - tri[0][1]);
   let dxdy2 = (tri[2][0] - tri[0][0]) / (tri[2][1] - tri[0][1]);
@@ -89,14 +94,23 @@ export function drawGeneralTriangle(triangle, color, contextData, zBuffer) {
   let zl = szl;
   let zr = szl;
 
-  for (let cy = y1; cy < clampMaxVertical(y2, height); cy++) {
-    fillFlatScanline(contextData, zBuffer, width, cy, cxl, cxr, zl, zr, color);
+  const advanceBy = (n) => {
+    zl += dzdl * n;
+    zr += dzdr * n;
+    cxl += dxl * n;
+    cxr += dxr * n;
+  };
 
-    zl += dzdl;
-    zr += dzdr;
-    cxl += dxl;
-    cxr += dxr;
+  const advanceRow = () => advanceBy(1);
+
+  let cy = clipMinVerticalStart(y1, advanceBy);
+  const endY1 = clampMaxVertical(y2, height);
+  for (; cy < endY1; cy++) {
+    fillFlatScanline(contextData, zBuffer, width, cy, cxl, cxr, zl, zr, color);
+    advanceRow();
   }
+
+  if (y2 > 0 && cy < y2) return;
 
   if (dxdy1 < dxdy2) {
     dxl = (tri[2][0] - tri[1][0]) / (tri[2][1] - tri[1][1]);
@@ -110,12 +124,23 @@ export function drawGeneralTriangle(triangle, color, contextData, zBuffer) {
     dzdr = (ezr - ezl) / (y3 - y2);
   }
 
-  for (let cy = y2; cy < clampMaxVertical(y3, height); cy++) {
-    fillFlatScanline(contextData, zBuffer, width, cy, cxl, cxr, zl, zr, color);
+  if (y2 < 0) {
+    const n = -y2;
+    if (dxdy1 < dxdy2) {
+      cxl += dxl * n;
+      zl += dzdl * n;
+    } else {
+      cxr += dxr * n;
+      zr += dzdr * n;
+    }
+    cy = 0;
+  } else {
+    cy = y2;
+  }
 
-    zl += dzdl;
-    zr += dzdr;
-    cxl += dxl;
-    cxr += dxr;
+  const endY2 = clampMaxVertical(y3, height);
+  for (; cy < endY2; cy++) {
+    fillFlatScanline(contextData, zBuffer, width, cy, cxl, cxr, zl, zr, color);
+    advanceRow();
   }
 }

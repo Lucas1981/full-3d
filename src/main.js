@@ -26,12 +26,18 @@ function resize() {
 resize();
 window.addEventListener("resize", resize);
 
+const cubeCenter = new Mesh(cubeData);
+cubeCenter.position.x = 0;
+cubeCenter.position.y = 0;
+cubeCenter.position.z = -4;
+
 const cubeFront = new Mesh(cubeData);
 cubeFront.position.z = -4;
 const cubeBack = new Mesh(cubeData);
 cubeBack.position.z = -4;
+// cubeBack.position.y = 2;
 
-const meshes = [cubeFront, cubeBack];
+const meshes = [cubeCenter, cubeFront, cubeBack];
 
 const sceneCenter = [
   cubeFront.position.x,
@@ -99,6 +105,10 @@ function frame(now) {
   //   spotBaseDirection[1],
   //   spotBaseDirection[0] * sin + spotBaseDirection[2] * cos,
   // ]);
+
+  cubeCenter.rotation.x += CUBE_ROTATION_SPEED * 0.6 * dt;
+  cubeCenter.rotation.y += CUBE_ROTATION_SPEED * dt;
+  cubeCenter.rotation.z += CUBE_ROTATION_SPEED * 0.4 * dt;
 
   cubeFront.position.x = 8 * Math.sin(spotSwingPhase);
   cubeBack.position.y = 8 * Math.sin(spotSwingPhase);

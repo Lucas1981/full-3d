@@ -8,8 +8,13 @@ import {
   inclusiveSpan,
   isDegenerateSpan,
   clampMaxHorizontal,
+  clampMinHorizontal,
   clampMaxVertical,
   isSpanPastRightEdge,
+  isSpanPastLeftEdge,
+  isTriangleAboveScreen,
+  clipMinVerticalStart,
+  lerpAlongEdge,
 } from './scanline.js';
 
 function sampleTexturedPixel(texture, contextData, zBuffer, x, y, invZ, tu, tv, intensity) {
@@ -52,14 +57,14 @@ function fillTexturedScanline(
   ir,
 ) {
   const { left, right } = inclusiveSpan(cxl, cxr);
-  if (isSpanPastRightEdge(left, width)) return;
+  if (isSpanPastRightEdge(left, width) || isSpanPastLeftEdge(right)) return;
 
+  const drawLeft = clampMinHorizontal(left);
   const drawRight = clampMaxHorizontal(right, width);
+  if (drawLeft > drawRight) return;
 
   if (isDegenerateSpan(cxl, cxr)) {
-    if (left <= drawRight) {
-      sampleTexturedPixel(texture, contextData, zBuffer, left, cy, zl, ul / zl, vl / zl, il);
-    }
+    sampleTexturedPixel(texture, contextData, zBuffer, drawLeft, cy, zl, ul / zl, vl / zl, il);
     return;
   }
 
@@ -67,12 +72,12 @@ function fillTexturedScanline(
   const dvx = (vr - vl) / (cxr - cxl);
   const dzx = (zr - zl) / (cxr - cxl);
   const dix = (ir - il) / (cxr - cxl);
-  let u = ul;
-  let v = vl;
-  let z = zl;
-  let intensity = il;
+  let u = lerpAlongEdge(cxl, cxr, ul, ur, drawLeft);
+  let v = lerpAlongEdge(cxl, cxr, vl, vr, drawLeft);
+  let z = lerpAlongEdge(cxl, cxr, zl, zr, drawLeft);
+  let intensity = lerpAlongEdge(cxl, cxr, il, ir, drawLeft);
 
-  for (let i = left; i <= drawRight; i++) {
+  for (let i = drawLeft; i <= drawRight; i++) {
     sampleTexturedPixel(texture, contextData, zBuffer, i, cy, z, u / z, v / z, intensity);
     u += dux;
     v += dvx;
@@ -94,7 +99,7 @@ export function drawGeneralTriangleGouraudTexture(triangle, texture, contextData
   const y2 = tri[1][1];
   const y3 = tri[2][1];
 
-  if (y1 >= height) return;
+  if (y1 >= height || isTriangleAboveScreen(y3)) return;
 
   let dxdy1 = (tri[1][0] - tri[0][0]) / (tri[1][1] - tri[0][1]);
   let dxdy2 = (tri[2][0] - tri[0][0]) / (tri[2][1] - tri[0][1]);
@@ -163,22 +168,31 @@ export function drawGeneralTriangleGouraudTexture(triangle, texture, contextData
   let zr = syz1;
   let ir = syi1;
 
-  for (let cy = y1; cy < clampMaxVertical(y2, height); cy++) {
+  const advanceBy = (n) => {
+    ul += dyul * n;
+    vl += dyvl * n;
+    zl += dyzl * n;
+    il += dyil * n;
+    ur += dyur * n;
+    vr += dyvr * n;
+    zr += dyzr * n;
+    ir += dyir * n;
+    cxl += dxl * n;
+    cxr += dxr * n;
+  };
+
+  const advanceRow = () => advanceBy(1);
+
+  let cy = clipMinVerticalStart(y1, advanceBy);
+  const endY1 = clampMaxVertical(y2, height);
+  for (; cy < endY1; cy++) {
     fillTexturedScanline(
       texture, contextData, zBuffer, width, cy, cxl, cxr, ul, vl, zl, il, ur, vr, zr, ir,
     );
-
-    ul += dyul;
-    vl += dyvl;
-    zl += dyzl;
-    il += dyil;
-    ur += dyur;
-    vr += dyvr;
-    zr += dyzr;
-    ir += dyir;
-    cxr += dxr;
-    cxl += dxl;
+    advanceRow();
   }
+
+  if (y2 > 0 && cy < y2) return;
 
   // Flat top part (y2 to y3)
   if (dxdy1 < dxdy2) {
@@ -205,20 +219,31 @@ export function drawGeneralTriangleGouraudTexture(triangle, texture, contextData
     dyir = (eyi2 - eyi1) / (y3 - y2);
   }
 
-  for (let cy = y2; cy < clampMaxVertical(y3, height); cy++) {
+  if (y2 < 0) {
+    const n = -y2;
+    if (dxdy1 < dxdy2) {
+      cxl += dxl * n;
+      ul += dyul * n;
+      vl += dyvl * n;
+      zl += dyzl * n;
+      il += dyil * n;
+    } else {
+      cxr += dxr * n;
+      ur += dyur * n;
+      vr += dyvr * n;
+      zr += dyzr * n;
+      ir += dyir * n;
+    }
+    cy = 0;
+  } else {
+    cy = y2;
+  }
+
+  const endY2 = clampMaxVertical(y3, height);
+  for (; cy < endY2; cy++) {
     fillTexturedScanline(
       texture, contextData, zBuffer, width, cy, cxl, cxr, ul, vl, zl, il, ur, vr, zr, ir,
     );
-
-    ul += dyul;
-    vl += dyvl;
-    zl += dyzl;
-    il += dyil;
-    ur += dyur;
-    vr += dyvr;
-    zr += dyzr;
-    ir += dyir;
-    cxr += dxr;
-    cxl += dxl;
+    advanceRow();
   }
 }

@@ -8,8 +8,13 @@ import {
   inclusiveSpan,
   isDegenerateSpan,
   clampMaxHorizontal,
+  clampMinHorizontal,
   clampMaxVertical,
   isSpanPastRightEdge,
+  isSpanPastLeftEdge,
+  isTriangleAboveScreen,
+  clipMinVerticalStart,
+  lerpAlongEdge,
 } from './scanline.js';
 
 function plotGouraudPixel(contextData, zBuffer, x, y, invZ, r, g, b) {
@@ -39,14 +44,14 @@ function fillGouraudScanline(
   zr,
 ) {
   const { left, right } = inclusiveSpan(cxl, cxr);
-  if (isSpanPastRightEdge(left, width)) return;
+  if (isSpanPastRightEdge(left, width) || isSpanPastLeftEdge(right)) return;
 
+  const drawLeft = clampMinHorizontal(left);
   const drawRight = clampMaxHorizontal(right, width);
+  if (drawLeft > drawRight) return;
 
   if (isDegenerateSpan(cxl, cxr)) {
-    if (left <= drawRight) {
-      plotGouraudPixel(contextData, zBuffer, left, cy, zl, rl, gl, bl);
-    }
+    plotGouraudPixel(contextData, zBuffer, drawLeft, cy, zl, rl, gl, bl);
     return;
   }
 
@@ -54,12 +59,12 @@ function fillGouraudScanline(
   const dgx = (gr - gl) / (cxr - cxl);
   const dbx = (br - bl) / (cxr - cxl);
   const dzx = (zr - zl) / (cxr - cxl);
-  let r = rl;
-  let g = gl;
-  let b = bl;
-  let z = zl;
+  let r = lerpAlongEdge(cxl, cxr, rl, rr, drawLeft);
+  let g = lerpAlongEdge(cxl, cxr, gl, gr, drawLeft);
+  let b = lerpAlongEdge(cxl, cxr, bl, br, drawLeft);
+  let z = lerpAlongEdge(cxl, cxr, zl, zr, drawLeft);
 
-  for (let i = left; i <= drawRight; i++) {
+  for (let i = drawLeft; i <= drawRight; i++) {
     plotGouraudPixel(contextData, zBuffer, i, cy, z, r, g, b);
     r += drx;
     g += dgx;
@@ -81,7 +86,7 @@ export function drawGeneralTriangleGouraud(triangle, contextData, zBuffer) {
   const y2 = tri[1][1];
   const y3 = tri[2][1];
 
-  if (y1 >= height) return;
+  if (y1 >= height || isTriangleAboveScreen(y3)) return;
 
   let dxdy1 = (tri[1][0] - tri[0][0]) / (tri[1][1] - tri[0][1]);
   let dxdy2 = (tri[2][0] - tri[0][0]) / (tri[2][1] - tri[0][1]);
@@ -146,22 +151,31 @@ export function drawGeneralTriangleGouraud(triangle, contextData, zBuffer) {
   let br = sbl;
   let zr = szl;
 
-  for (let cy = y1; cy < clampMaxVertical(y2, height); cy++) {
+  const advanceBy = (n) => {
+    rl += drdl * n;
+    gl += dgdl * n;
+    bl += dbdl * n;
+    zl += dzdl * n;
+    rr += drdr * n;
+    gr += dgdr * n;
+    br += dbdr * n;
+    zr += dzdr * n;
+    cxl += dxl * n;
+    cxr += dxr * n;
+  };
+
+  const advanceRow = () => advanceBy(1);
+
+  let cy = clipMinVerticalStart(y1, advanceBy);
+  const endY1 = clampMaxVertical(y2, height);
+  for (; cy < endY1; cy++) {
     fillGouraudScanline(
       contextData, zBuffer, width, cy, cxl, cxr, rl, gl, bl, zl, rr, gr, br, zr,
     );
-
-    rl += drdl;
-    gl += dgdl;
-    bl += dbdl;
-    zl += dzdl;
-    rr += drdr;
-    gr += dgdr;
-    br += dbdr;
-    zr += dzdr;
-    cxl += dxl;
-    cxr += dxr;
+    advanceRow();
   }
+
+  if (y2 > 0 && cy < y2) return;
 
   if (dxdy1 < dxdy2) {
     dxl = (tri[2][0] - tri[1][0]) / (tri[2][1] - tri[1][1]);
@@ -187,20 +201,31 @@ export function drawGeneralTriangleGouraud(triangle, contextData, zBuffer) {
     dzdr = (ezr - ezl) / (y3 - y2);
   }
 
-  for (let cy = y2; cy < clampMaxVertical(y3, height); cy++) {
+  if (y2 < 0) {
+    const n = -y2;
+    if (dxdy1 < dxdy2) {
+      cxl += dxl * n;
+      rl += drdl * n;
+      gl += dgdl * n;
+      bl += dbdl * n;
+      zl += dzdl * n;
+    } else {
+      cxr += dxr * n;
+      rr += drdr * n;
+      gr += dgdr * n;
+      br += dbdr * n;
+      zr += dzdr * n;
+    }
+    cy = 0;
+  } else {
+    cy = y2;
+  }
+
+  const endY2 = clampMaxVertical(y3, height);
+  for (; cy < endY2; cy++) {
     fillGouraudScanline(
       contextData, zBuffer, width, cy, cxl, cxr, rl, gl, bl, zl, rr, gr, br, zr,
     );
-
-    rl += drdl;
-    gl += dgdl;
-    bl += dbdl;
-    zl += dzdl;
-    rr += drdr;
-    gr += dgdr;
-    br += dbdr;
-    zr += dzdr;
-    cxl += dxl;
-    cxr += dxr;
+    advanceRow();
   }
 }
