@@ -4,6 +4,7 @@ import {
   isSphereOutsideFrustum,
 } from "./frustum-culling.js";
 import { isTriangleOutsideScreen } from "./screen-culling.js";
+import { cullBackFaces } from "./culling.js";
 import { clipAgainstNearPlane } from "./clip-clip-space.js";
 import { drawGeneralTriangle } from "../shaders/flat-shade-rasterizer.js";
 import { drawGeneralTriangleGouraud } from "../shaders/gouraud-shaded-rasterizer.js";
@@ -54,6 +55,11 @@ export class Renderer {
     return [t[0], t[1], t[2]];
   }
 
+  #toCameraSpace(mv, vertex) {
+    const t = mat4.transformVec4(mv, [vertex[0], vertex[1], vertex[2], 1]);
+    return [t[0], t[1], t[2]];
+  }
+
   #safePerspectiveW(w) {
     if (w === 0) return W_EPS;
     if (Math.abs(w) < W_EPS) return w < 0 ? -W_EPS : W_EPS;
@@ -85,8 +91,17 @@ export class Renderer {
 
   #buildClipMesh(mesh, view, proj) {
     const model = mesh.getModelMatrix();
-    const mvp = mat4.multiply(proj, mat4.multiply(view, model));
+    const mv = mat4.multiply(view, model);
+    const mvp = mat4.multiply(proj, mv);
     const worldVerts = mesh.vertices.map((v) => this.#toWorldSpace(model, v));
+    const cameraSpaceVerts = mesh.vertices.map((v) =>
+      this.#toCameraSpace(mv, v),
+    );
+
+    const visiblePolygons = cullBackFaces(
+      mesh.polygons,
+      cameraSpaceVerts,
+    ).filter((poly) => poly.show);
 
     const clipPoints = mesh.vertices.map((_, i) => {
       const clip = mat4.transformVec4(mvp, [
@@ -108,7 +123,7 @@ export class Renderer {
 
     const clipResult = clipAgainstNearPlane({
       points: clipPoints,
-      polygons: mesh.polygons.map((poly) => ({
+      polygons: visiblePolygons.map((poly) => ({
         materialColor: poly.materialColor,
         texture: poly.texture,
         shade: poly.shade,

@@ -4,9 +4,9 @@ import * as vec3 from '../math/vec3.js';
  * View-space backface culling.
  * Returns cloned polygons with `show` set from the camera-space winding / normal test.
  *
- * @param {import('./polygon.js').Polygon[]} polygons
+ * @param {import('../scene/polygon.js').Polygon[]} polygons
  * @param {number[][]} cameraSpaceVerts  [x,y,z] per vertex index
- * @returns {import('./polygon.js').Polygon[]}
+ * @returns {import('../scene/polygon.js').Polygon[]}
  */
 export function cullBackFaces(polygons, cameraSpaceVerts) {
   return polygons.map((poly) => {
