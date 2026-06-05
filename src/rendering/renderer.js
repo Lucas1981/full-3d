@@ -1,9 +1,9 @@
 import * as mat4 from "../math/mat4.js";
-import { cullBackFaces } from "./culling.js";
 import {
   extractFrustumPlanes,
   isSphereOutsideFrustum,
 } from "./frustum-culling.js";
+import { clipAgainstNearPlane } from "./clip-clip-space.js";
 import { drawGeneralTriangle } from "../shaders/flat-shade-rasterizer.js";
 import { drawGeneralTriangleGouraud } from "../shaders/gouraud-shaded-rasterizer.js";
 import { drawGeneralTriangleGouraudTexture } from "../shaders/gouraud-shaded-textured-rasterizer.js";
@@ -16,6 +16,8 @@ const FOV_Y = Math.PI / 3;
 const NEAR = 0.1;
 const FAR = 1000;
 const AMBIENT = 1;
+/** Avoid division by zero in the perspective divide when clip.w is exactly 0. */
+const W_EPS = 1e-8;
 
 export class Renderer {
   constructor(canvas) {
@@ -51,69 +53,99 @@ export class Renderer {
     return [t[0], t[1], t[2]];
   }
 
-  #toCameraSpace(view, worldVertex) {
-    const t = mat4.transformVec4(view, [
-      worldVertex[0],
-      worldVertex[1],
-      worldVertex[2],
-      1,
-    ]);
-    return [t[0], t[1], t[2]];
+  #safePerspectiveW(w) {
+    if (w === 0) return W_EPS;
+    if (Math.abs(w) < W_EPS) return w < 0 ? -W_EPS : W_EPS;
+    return w;
   }
 
-  #projectVertex(proj, cameraVertex) {
-    const clip = mat4.transformVec4(proj, [
-      cameraVertex[0],
-      cameraVertex[1],
-      cameraVertex[2],
-      1,
-    ]);
-    const w = clip[3];
-    if (w <= 0) return null;
-
-    const ndcX = clip[0] / w;
-    const ndcY = clip[1] / w;
-
+  #clipToScreen(x, y, w) {
+    const safeW = this.#safePerspectiveW(w);
+    const ndcX = x / safeW;
+    const ndcY = y / safeW;
     return [(ndcX + 1) * 0.5 * this.width, (-ndcY + 1) * 0.5 * this.height];
   }
 
-  #drawTexturedPolygon(
+  #worldPos(pt) {
+    return [pt.wx, pt.wy, pt.wz];
+  }
+
+  #cameraDepth(view, worldPos) {
+    const cam = mat4.transformVec4(view, [...worldPos, 1]);
+    return -cam[2];
+  }
+
+  #cornerUv(poly, pt, cornerIdx) {
+    if (pt.u !== undefined && pt.v !== undefined) {
+      return [pt.u, pt.v];
+    }
+    return poly.uvs[cornerIdx];
+  }
+
+  #buildClipMesh(mesh, view, proj) {
+    const model = mesh.getModelMatrix();
+    const mvp = mat4.multiply(proj, mat4.multiply(view, model));
+    const worldVerts = mesh.vertices.map((v) => this.#toWorldSpace(model, v));
+
+    const clipPoints = mesh.vertices.map((_, i) => {
+      const clip = mat4.transformVec4(mvp, [
+        mesh.vertices[i][0],
+        mesh.vertices[i][1],
+        mesh.vertices[i][2],
+        1,
+      ]);
+      return {
+        x: clip[0],
+        y: clip[1],
+        z: clip[2],
+        w: clip[3],
+        wx: worldVerts[i][0],
+        wy: worldVerts[i][1],
+        wz: worldVerts[i][2],
+      };
+    });
+
+    const clipResult = clipAgainstNearPlane({
+      points: clipPoints,
+      polygons: mesh.polygons.map((poly) => ({
+        materialColor: poly.materialColor,
+        texture: poly.texture,
+        shade: poly.shade,
+        vertexIndices: poly.vertexIndices,
+        uvs: poly.uvs,
+      })),
+    });
+
+    return { ...clipResult, clipPoints, worldVerts };
+  }
+
+  #drawClippedTexturedPolygon(
     poly,
+    points,
     indices,
-    worldVerts,
     faceNormal,
-    cameraSpaceVerts,
-    projected,
+    view,
     lights,
     contextData,
     zBuffer,
   ) {
     const texture = getTexture(poly.texture);
-    if (!texture || !poly.uvs) return false;
+    if (!texture) return;
 
     const tw = texture.width;
     const th = texture.height;
     const triangle = [];
 
     for (let corner = 0; corner < 3; corner++) {
-      const i = indices[corner];
-      const screen = projected[i].map(Math.round);
-      console.log("screen", screen);
-      const depth = -cameraSpaceVerts[i][2];
+      const idx = indices[corner];
+      const pt = points[idx];
+      const screen = this.#clipToScreen(pt.x, pt.y, pt.w);
+      const worldPos = this.#worldPos(pt);
+      const depth = this.#cameraDepth(view, worldPos);
 
-      if (screen === null || depth <= 0) {
-        triangle.length = 0;
-        break;
-      }
+      const intensity = shadeIntensity(worldPos, faceNormal, lights, AMBIENT);
 
-      const intensity = shadeIntensity(
-        worldVerts[i],
-        faceNormal,
-        lights,
-        AMBIENT,
-      );
-
-      const [u, v] = poly.uvs[corner];
+      const [u, v] = this.#cornerUv(poly, pt, corner);
       triangle.push([
         screen[0],
         screen[1],
@@ -126,26 +158,22 @@ export class Renderer {
       ]);
     }
 
-    if (triangle.length !== 3) return true;
-
     drawGeneralTriangleGouraudTexture(triangle, texture, contextData, zBuffer);
-    return true;
   }
 
-  #drawFlatPolygon(
+  #drawClippedFlatPolygon(
     poly,
+    points,
     indices,
-    worldVerts,
     faceNormal,
-    cameraSpaceVerts,
-    projected,
+    view,
     lights,
     contextData,
     zBuffer,
   ) {
-    const w0 = worldVerts[indices[0]];
-    const w1 = worldVerts[indices[1]];
-    const w2 = worldVerts[indices[2]];
+    const w0 = this.#worldPos(points[indices[0]]);
+    const w1 = this.#worldPos(points[indices[1]]);
+    const w2 = this.#worldPos(points[indices[2]]);
     const centroid = [
       (w0[0] + w1[0] + w2[0]) / 3,
       (w0[1] + w1[1] + w2[1]) / 3,
@@ -161,126 +189,96 @@ export class Renderer {
     const color = [lit[0], lit[1], lit[2], 255];
     const triangle = [];
 
-    for (const i of indices) {
-      const screen = projected[i];
-      const depth = -cameraSpaceVerts[i][2];
-
-      if (screen === null || depth <= 0) {
-        triangle.length = 0;
-        break;
-      }
-
+    for (const idx of indices) {
+      const pt = points[idx];
+      const screen = this.#clipToScreen(pt.x, pt.y, pt.w);
+      const depth = this.#cameraDepth(view, this.#worldPos(pt));
       triangle.push([screen[0], screen[1], depth]);
     }
-
-    if (triangle.length !== 3) return;
 
     drawGeneralTriangle(triangle, color, contextData, zBuffer);
   }
 
-  #drawGouraudPolygon(
+  #drawClippedGouraudPolygon(
     poly,
+    points,
     indices,
-    worldVerts,
     faceNormal,
-    cameraSpaceVerts,
-    projected,
+    view,
     lights,
     contextData,
     zBuffer,
   ) {
     const triangle = [];
 
-    for (const i of indices) {
-      const screen = projected[i];
-      if (screen === null) {
-        triangle.length = 0;
-        break;
-      }
-
+    for (const idx of indices) {
+      const pt = points[idx];
+      const screen = this.#clipToScreen(pt.x, pt.y, pt.w);
+      const worldPos = this.#worldPos(pt);
       const lit = shadeVertex(
-        worldVerts[i],
+        worldPos,
         faceNormal,
         poly.materialColor,
         lights,
         AMBIENT,
       );
-
-      const depth = -cameraSpaceVerts[i][2];
-      if (depth <= 0) {
-        triangle.length = 0;
-        break;
-      }
+      const depth = this.#cameraDepth(view, worldPos);
 
       triangle.push([screen[0], screen[1], lit[0], lit[1], lit[2], depth]);
     }
 
-    if (triangle.length !== 3) return;
-
     drawGeneralTriangleGouraud(triangle, contextData, zBuffer);
   }
 
-  #renderMesh(mesh, view, proj, lights, contextData, zBuffer) {
-    const model = mesh.getModelMatrix();
-    const worldVerts = mesh.vertices.map((v) => this.#toWorldSpace(model, v));
-    const cameraSpaceVerts = worldVerts.map((w) =>
-      this.#toCameraSpace(view, w),
-    );
-    const culledPolygons = cullBackFaces(mesh.polygons, cameraSpaceVerts);
-    const projected = cameraSpaceVerts.map((v) => this.#projectVertex(proj, v));
+  #renderClippedMesh(mesh, view, proj, lights, contextData, zBuffer) {
+    const { points, polygons } = this.#buildClipMesh(mesh, view, proj);
 
-    for (const poly of culledPolygons) {
-      if (!poly.show) continue;
-
+    for (const poly of polygons) {
       const indices = poly.vertexIndices;
-      const w0 = worldVerts[indices[0]];
-      const w1 = worldVerts[indices[1]];
-      const w2 = worldVerts[indices[2]];
+      const w0 = this.#worldPos(points[indices[0]]);
+      const w1 = this.#worldPos(points[indices[1]]);
+      const w2 = this.#worldPos(points[indices[2]]);
       const faceNormal = triangleNormal(w0, w1, w2);
 
-      if (
-        poly.texture &&
-        this.#drawTexturedPolygon(
+      if (poly.texture) {
+        this.#drawClippedTexturedPolygon(
           poly,
+          points,
           indices,
-          worldVerts,
           faceNormal,
-          cameraSpaceVerts,
-          projected,
+          view,
           lights,
           contextData,
           zBuffer,
-        )
-      ) {
+        );
         continue;
       }
 
       if (poly.shade === "flat") {
-        this.#drawFlatPolygon(
+        this.#drawClippedFlatPolygon(
           poly,
+          points,
           indices,
-          worldVerts,
           faceNormal,
-          cameraSpaceVerts,
-          projected,
+          view,
           lights,
           contextData,
           zBuffer,
         );
       } else {
-        this.#drawGouraudPolygon(
+        this.#drawClippedGouraudPolygon(
           poly,
+          points,
           indices,
-          worldVerts,
           faceNormal,
-          cameraSpaceVerts,
-          projected,
+          view,
           lights,
           contextData,
           zBuffer,
         );
       }
     }
+
   }
 
   /**
@@ -302,14 +300,20 @@ export class Renderer {
 
     const viewProj = mat4.multiply(proj, view);
     const frustumPlanes = extractFrustumPlanes(viewProj);
-
     for (const mesh of meshes) {
       const { center, radius } = mesh.getWorldBounds();
       if (isSphereOutsideFrustum(center, radius, frustumPlanes)) {
         continue;
       }
 
-      this.#renderMesh(mesh, view, proj, lights, contextData, this.zBuffer);
+      this.#renderClippedMesh(
+        mesh,
+        view,
+        proj,
+        lights,
+        contextData,
+        this.zBuffer,
+      );
     }
 
     this.ctx.putImageData(contextData, 0, 0);

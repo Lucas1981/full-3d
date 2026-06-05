@@ -20,7 +20,7 @@ import {
 function plotFlatPixel(contextData, zBuffer, x, y, invZ, color) {
   if (!zBuffer.tryCommit(x, y, invZ)) return;
 
-  const base = (y * contextData.width + x) * 4;
+  const base = ((y | 0) * contextData.width + (x | 0)) * 4;
   contextData.data[base] = color[0];
   contextData.data[base + 1] = color[1];
   contextData.data[base + 2] = color[2];

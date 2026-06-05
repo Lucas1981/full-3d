@@ -15,19 +15,34 @@ import {
   isTriangleAboveScreen,
   clipMinVerticalStart,
   lerpAlongEdge,
-} from './scanline.js';
+} from "./scanline.js";
 
-function sampleTexturedPixel(texture, contextData, zBuffer, x, y, invZ, tu, tv, intensity) {
+function sampleTexturedPixel(
+  texture,
+  contextData,
+  zBuffer,
+  x,
+  y,
+  invZ,
+  tu,
+  tv,
+  intensity,
+) {
   if (!zBuffer.tryCommit(x, y, invZ)) return;
 
+  const ix = x | 0;
+  const iy = y | 0;
   const tw = texture.width;
   const th = texture.height;
   const tx = Math.max(0, Math.min(tw - 1, Math.floor(tu)));
   const ty = Math.max(0, Math.min(th - 1, Math.floor(tv)));
-  const contextBase = (y * contextData.width + x) * 4;
+  const contextBase = (iy * contextData.width + ix) * 4;
   const textureBase = (ty * tw + tx) * 4;
 
-  contextData.data[contextBase] = Math.min(texture.data[textureBase] * intensity, 255);
+  contextData.data[contextBase] = Math.min(
+    texture.data[textureBase] * intensity,
+    255,
+  );
   contextData.data[contextBase + 1] = Math.min(
     texture.data[textureBase + 1] * intensity,
     255,
@@ -64,7 +79,17 @@ function fillTexturedScanline(
   if (drawLeft > drawRight) return;
 
   if (isDegenerateSpan(cxl, cxr)) {
-    sampleTexturedPixel(texture, contextData, zBuffer, drawLeft, cy, zl, ul / zl, vl / zl, il);
+    sampleTexturedPixel(
+      texture,
+      contextData,
+      zBuffer,
+      drawLeft,
+      cy,
+      zl,
+      ul / zl,
+      vl / zl,
+      il,
+    );
     return;
   }
 
@@ -78,7 +103,17 @@ function fillTexturedScanline(
   let intensity = lerpAlongEdge(cxl, cxr, il, ir, drawLeft);
 
   for (let i = drawLeft; i <= drawRight; i++) {
-    sampleTexturedPixel(texture, contextData, zBuffer, i, cy, z, u / z, v / z, intensity);
+    sampleTexturedPixel(
+      texture,
+      contextData,
+      zBuffer,
+      i,
+      cy,
+      z,
+      u / z,
+      v / z,
+      intensity,
+    );
     u += dux;
     v += dvx;
     z += dzx;
@@ -89,7 +124,12 @@ function fillTexturedScanline(
 /**
  * Draw a textured triangle with Gouraud intensity and perspective-correct UV.
  */
-export function drawGeneralTriangleGouraudTexture(triangle, texture, contextData, zBuffer) {
+export function drawGeneralTriangleGouraudTexture(
+  triangle,
+  texture,
+  contextData,
+  zBuffer,
+) {
   const width = contextData.width;
   const height = contextData.height;
 
@@ -187,7 +227,21 @@ export function drawGeneralTriangleGouraudTexture(triangle, texture, contextData
   const endY1 = clampMaxVertical(y2, height);
   for (; cy < endY1; cy++) {
     fillTexturedScanline(
-      texture, contextData, zBuffer, width, cy, cxl, cxr, ul, vl, zl, il, ur, vr, zr, ir,
+      texture,
+      contextData,
+      zBuffer,
+      width,
+      cy,
+      cxl,
+      cxr,
+      ul,
+      vl,
+      zl,
+      il,
+      ur,
+      vr,
+      zr,
+      ir,
     );
     advanceRow();
   }
@@ -242,7 +296,21 @@ export function drawGeneralTriangleGouraudTexture(triangle, texture, contextData
   const endY2 = clampMaxVertical(y3, height);
   for (; cy < endY2; cy++) {
     fillTexturedScanline(
-      texture, contextData, zBuffer, width, cy, cxl, cxr, ul, vl, zl, il, ur, vr, zr, ir,
+      texture,
+      contextData,
+      zBuffer,
+      width,
+      cy,
+      cxl,
+      cxr,
+      ul,
+      vl,
+      zl,
+      il,
+      ur,
+      vr,
+      zr,
+      ir,
     );
     advanceRow();
   }
