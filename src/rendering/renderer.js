@@ -3,6 +3,7 @@ import {
   extractFrustumPlanes,
   isSphereOutsideFrustum,
 } from "./frustum-culling.js";
+import { isTriangleOutsideScreen } from "./screen-culling.js";
 import { clipAgainstNearPlane } from "./clip-clip-space.js";
 import { drawGeneralTriangle } from "../shaders/flat-shade-rasterizer.js";
 import { drawGeneralTriangleGouraud } from "../shaders/gouraud-shaded-rasterizer.js";
@@ -230,11 +231,32 @@ export class Renderer {
     drawGeneralTriangleGouraud(triangle, contextData, zBuffer);
   }
 
+  #projectTriangleScreen(points, indices) {
+    const screenVerts = [];
+    for (const idx of indices) {
+      const pt = points[idx];
+      screenVerts.push(this.#clipToScreen(pt.x, pt.y, pt.w));
+    }
+    return screenVerts;
+  }
+
   #renderClippedMesh(mesh, view, proj, lights, contextData, zBuffer) {
     const { points, polygons } = this.#buildClipMesh(mesh, view, proj);
+    const { width, height } = contextData;
 
     for (const poly of polygons) {
       const indices = poly.vertexIndices;
+
+      if (
+        isTriangleOutsideScreen(
+          this.#projectTriangleScreen(points, indices),
+          width,
+          height,
+        )
+      ) {
+        continue;
+      }
+
       const w0 = this.#worldPos(points[indices[0]]);
       const w1 = this.#worldPos(points[indices[1]]);
       const w2 = this.#worldPos(points[indices[2]]);
