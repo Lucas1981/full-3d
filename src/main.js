@@ -8,6 +8,13 @@ import * as vec3 from "./math/vec3.js";
 import cubeData from "./assets/cube.json";
 import { preloadTextures } from "./textures/texture-cache.js";
 
+const CUBE_ROTATION_SPEED = 0.8;
+const LIGHT_ORBIT_RADIUS = 3.5;
+const LIGHT_ORBIT_HEIGHT = 2.5;
+const LIGHT_ORBIT_SPEED = CUBE_ROTATION_SPEED * 3;
+const SPOT_SWING_SPEED = 1.1;
+const SPOT_SWING_ANGLE = 0.45;
+
 const canvas = document.getElementById("canvas");
 const renderer = new Renderer(canvas);
 
@@ -22,23 +29,18 @@ window.addEventListener("resize", resize);
 const cubeFront = new Mesh(cubeData);
 cubeFront.position.z = -4;
 
-const cubeBack = new Mesh(cubeData);
-cubeBack.position.x = 0.9;
-cubeBack.position.z = -5.8;
+const meshes = [cubeFront];
 
-/** Front cube first, back cube last — back is drawn on top despite being farther away. */
-const meshes = [cubeFront, cubeBack];
-
-const sceneCenter = [cubeFront.position.x, cubeFront.position.y, cubeFront.position.z];
-
-const viewDistance = 4;
-const orbitY = Math.PI / 4;
-const camera = new Camera();
-camera.position = [
-  sceneCenter[0] + viewDistance * Math.sin(orbitY),
-  sceneCenter[1],
-  sceneCenter[2] + viewDistance * Math.cos(orbitY),
+const sceneCenter = [
+  cubeFront.position.x,
+  cubeFront.position.y,
+  cubeFront.position.z,
 ];
+
+// const viewDistance = 4;
+// const orbitY = Math.PI / 4;
+const camera = new Camera();
+camera.position = [sceneCenter[0], sceneCenter[1], sceneCenter[2] - 4];
 camera.target = [...sceneCenter];
 
 const directionalLight = new DirectionalLight({
@@ -65,41 +67,38 @@ const spotLight = new SpotLight({
   penumbra: 0.4,
 });
 
-const lights = [directionalLight, pointLight, spotLight];
-
-const CUBE_ROTATION_SPEED = 0.8;
-const LIGHT_ORBIT_RADIUS = 3.5;
-const LIGHT_ORBIT_HEIGHT = 2.5;
-const LIGHT_ORBIT_SPEED = CUBE_ROTATION_SPEED * 3;
-const SPOT_SWING_SPEED = 1.1;
-const SPOT_SWING_ANGLE = 0.45;
+const lights = []; // [directionalLight, pointLight, spotLight];
 
 let orbitAngle = 0;
 let spotSwingPhase = 0;
 let lastTime = performance.now();
+let angle = 0;
 
 function frame(now) {
   const dt = (now - lastTime) / 1000;
   lastTime = now;
+  angle += dt;
 
-  cubeFront.rotation.y += CUBE_ROTATION_SPEED * dt;
-  orbitAngle += LIGHT_ORBIT_SPEED * dt;
+  // cubeFront.rotation.y += CUBE_ROTATION_SPEED * dt;
+  // orbitAngle += LIGHT_ORBIT_SPEED * dt;
   spotSwingPhase += SPOT_SWING_SPEED * dt;
 
-  pointLight.position[0] =
-    sceneCenter[0] + LIGHT_ORBIT_RADIUS * Math.sin(orbitAngle);
-  pointLight.position[1] = sceneCenter[1] + LIGHT_ORBIT_HEIGHT;
-  pointLight.position[2] =
-    sceneCenter[2] + LIGHT_ORBIT_RADIUS * Math.cos(orbitAngle);
+  // pointLight.position[0] =
+  //   sceneCenter[0] + LIGHT_ORBIT_RADIUS * Math.sin(orbitAngle);
+  // pointLight.position[1] = sceneCenter[1] + LIGHT_ORBIT_HEIGHT;
+  // pointLight.position[2] =
+  //   sceneCenter[2] + LIGHT_ORBIT_RADIUS * Math.cos(orbitAngle);
 
-  const swing = Math.sin(spotSwingPhase) * SPOT_SWING_ANGLE;
-  const cos = Math.cos(swing);
-  const sin = Math.sin(swing);
-  spotLight.direction = vec3.normalize([
-    spotBaseDirection[0] * cos - spotBaseDirection[2] * sin,
-    spotBaseDirection[1],
-    spotBaseDirection[0] * sin + spotBaseDirection[2] * cos,
-  ]);
+  // const swing = Math.sin(spotSwingPhase) * SPOT_SWING_ANGLE;
+  // const cos = Math.cos(swing);
+  // const sin = Math.sin(swing);
+  // spotLight.direction = vec3.normalize([
+  //   spotBaseDirection[0] * cos - spotBaseDirection[2] * sin,
+  //   spotBaseDirection[1],
+  //   spotBaseDirection[0] * sin + spotBaseDirection[2] * cos,
+  // ]);
+
+  cubeFront.position.x = 20 * Math.sin(spotSwingPhase);
 
   renderer.clear();
   renderer.render(meshes, camera, lights);

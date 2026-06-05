@@ -1,29 +1,39 @@
-import * as mat4 from '../math/mat4.js';
-import { cullBackFaces } from './culling.js';
-import { drawGeneralTriangle } from '../shaders/flat-shade-rasterizer.js';
-import { drawGeneralTriangleGouraud } from '../shaders/gouraud-shaded-rasterizer.js';
-import { drawGeneralTriangleGouraudTexture } from '../shaders/gouraud-shaded-textured-rasterizer.js';
-import { triangleNormal } from '../utils/geometry.js';
-import { shadeVertex, shadeIntensity } from '../lights/shade-vertex.js';
-import { getTexture } from '../textures/texture-cache.js';
-import { ZBuffer } from './z-buffer.js';
+import * as mat4 from "../math/mat4.js";
+import { cullBackFaces } from "./culling.js";
+import {
+  extractFrustumPlanes,
+  isSphereOutsideFrustum,
+} from "./frustum-culling.js";
+import { drawGeneralTriangle } from "../shaders/flat-shade-rasterizer.js";
+import { drawGeneralTriangleGouraud } from "../shaders/gouraud-shaded-rasterizer.js";
+import { drawGeneralTriangleGouraudTexture } from "../shaders/gouraud-shaded-textured-rasterizer.js";
+import { triangleNormal } from "../utils/geometry.js";
+import { shadeVertex, shadeIntensity } from "../lights/shade-vertex.js";
+import { getTexture } from "../textures/texture-cache.js";
+import { ZBuffer } from "./z-buffer.js";
 
 const FOV_Y = Math.PI / 3;
 const NEAR = 0.1;
 const FAR = 1000;
-const AMBIENT = 0.2;
+const AMBIENT = 1;
 
 export class Renderer {
   constructor(canvas) {
     this.canvas = canvas;
-    this.ctx = canvas.getContext('2d');
+    this.ctx = canvas.getContext("2d");
   }
 
-  get width() { return this.canvas.width; }
-  get height() { return this.canvas.height; }
-  get aspectRatio() { return this.width / this.height; }
+  get width() {
+    return this.canvas.width;
+  }
+  get height() {
+    return this.canvas.height;
+  }
+  get aspectRatio() {
+    return this.width / this.height;
+  }
 
-  clear(fillColor = '#000') {
+  clear(fillColor = "#000") {
     this.ctx.fillStyle = fillColor;
     this.ctx.fillRect(0, 0, this.width, this.height);
   }
@@ -43,14 +53,20 @@ export class Renderer {
 
   #toCameraSpace(view, worldVertex) {
     const t = mat4.transformVec4(view, [
-      worldVertex[0], worldVertex[1], worldVertex[2], 1,
+      worldVertex[0],
+      worldVertex[1],
+      worldVertex[2],
+      1,
     ]);
     return [t[0], t[1], t[2]];
   }
 
   #projectVertex(proj, cameraVertex) {
     const clip = mat4.transformVec4(proj, [
-      cameraVertex[0], cameraVertex[1], cameraVertex[2], 1,
+      cameraVertex[0],
+      cameraVertex[1],
+      cameraVertex[2],
+      1,
     ]);
     const w = clip[3];
     if (w <= 0) return null;
@@ -58,10 +74,7 @@ export class Renderer {
     const ndcX = clip[0] / w;
     const ndcY = clip[1] / w;
 
-    return [
-      (ndcX + 1) * 0.5 * this.width,
-      (-ndcY + 1) * 0.5 * this.height,
-    ];
+    return [(ndcX + 1) * 0.5 * this.width, (-ndcY + 1) * 0.5 * this.height];
   }
 
   #toRasterPoint(point) {
@@ -76,7 +89,17 @@ export class Renderer {
     ];
   }
 
-  #drawTexturedPolygon(poly, indices, worldVerts, faceNormal, cameraSpaceVerts, projected, lights, contextData, zBuffer) {
+  #drawTexturedPolygon(
+    poly,
+    indices,
+    worldVerts,
+    faceNormal,
+    cameraSpaceVerts,
+    projected,
+    lights,
+    contextData,
+    zBuffer,
+  ) {
     const texture = getTexture(poly.texture);
     if (!texture || !poly.uvs) return false;
 
@@ -120,7 +143,17 @@ export class Renderer {
     return true;
   }
 
-  #drawFlatPolygon(poly, indices, worldVerts, faceNormal, cameraSpaceVerts, projected, lights, contextData, zBuffer) {
+  #drawFlatPolygon(
+    poly,
+    indices,
+    worldVerts,
+    faceNormal,
+    cameraSpaceVerts,
+    projected,
+    lights,
+    contextData,
+    zBuffer,
+  ) {
     const w0 = worldVerts[indices[0]];
     const w1 = worldVerts[indices[1]];
     const w2 = worldVerts[indices[2]];
@@ -156,7 +189,17 @@ export class Renderer {
     drawGeneralTriangle(triangle, color, contextData, zBuffer);
   }
 
-  #drawGouraudPolygon(poly, indices, worldVerts, faceNormal, cameraSpaceVerts, projected, lights, contextData, zBuffer) {
+  #drawGouraudPolygon(
+    poly,
+    indices,
+    worldVerts,
+    faceNormal,
+    cameraSpaceVerts,
+    projected,
+    lights,
+    contextData,
+    zBuffer,
+  ) {
     const triangle = [];
 
     for (const i of indices) {
@@ -190,10 +233,12 @@ export class Renderer {
 
   #renderMesh(mesh, view, proj, lights, contextData, zBuffer) {
     const model = mesh.getModelMatrix();
-    const worldVerts = mesh.vertices.map(v => this.#toWorldSpace(model, v));
-    const cameraSpaceVerts = worldVerts.map(w => this.#toCameraSpace(view, w));
+    const worldVerts = mesh.vertices.map((v) => this.#toWorldSpace(model, v));
+    const cameraSpaceVerts = worldVerts.map((w) =>
+      this.#toCameraSpace(view, w),
+    );
     const culledPolygons = cullBackFaces(mesh.polygons, cameraSpaceVerts);
-    const projected = cameraSpaceVerts.map(v => this.#projectVertex(proj, v));
+    const projected = cameraSpaceVerts.map((v) => this.#projectVertex(proj, v));
 
     for (const poly of culledPolygons) {
       if (!poly.show) continue;
@@ -204,19 +249,46 @@ export class Renderer {
       const w2 = worldVerts[indices[2]];
       const faceNormal = triangleNormal(w0, w1, w2);
 
-      if (poly.texture && this.#drawTexturedPolygon(
-        poly, indices, worldVerts, faceNormal, cameraSpaceVerts, projected, lights, contextData, zBuffer,
-      )) {
+      if (
+        poly.texture &&
+        this.#drawTexturedPolygon(
+          poly,
+          indices,
+          worldVerts,
+          faceNormal,
+          cameraSpaceVerts,
+          projected,
+          lights,
+          contextData,
+          zBuffer,
+        )
+      ) {
         continue;
       }
 
-      if (poly.shade === 'flat') {
+      if (poly.shade === "flat") {
         this.#drawFlatPolygon(
-          poly, indices, worldVerts, faceNormal, cameraSpaceVerts, projected, lights, contextData, zBuffer,
+          poly,
+          indices,
+          worldVerts,
+          faceNormal,
+          cameraSpaceVerts,
+          projected,
+          lights,
+          contextData,
+          zBuffer,
         );
       } else {
         this.#drawGouraudPolygon(
-          poly, indices, worldVerts, faceNormal, cameraSpaceVerts, projected, lights, contextData, zBuffer,
+          poly,
+          indices,
+          worldVerts,
+          faceNormal,
+          cameraSpaceVerts,
+          projected,
+          lights,
+          contextData,
+          zBuffer,
         );
       }
     }
@@ -230,12 +302,24 @@ export class Renderer {
     const proj = this.#buildProjection();
     const contextData = this.#getContextData();
 
-    if (!this.zBuffer || this.zBuffer.width !== this.width || this.zBuffer.height !== this.height) {
+    if (
+      !this.zBuffer ||
+      this.zBuffer.width !== this.width ||
+      this.zBuffer.height !== this.height
+    ) {
       this.zBuffer = new ZBuffer(this.width, this.height);
     }
     this.zBuffer.clear();
 
+    const viewProj = mat4.multiply(proj, view);
+    const frustumPlanes = extractFrustumPlanes(viewProj);
+
     for (const mesh of meshes) {
+      const { center, radius } = mesh.getWorldBounds();
+      if (isSphereOutsideFrustum(center, radius, frustumPlanes)) {
+        continue;
+      }
+
       this.#renderMesh(mesh, view, proj, lights, contextData, this.zBuffer);
     }
 
